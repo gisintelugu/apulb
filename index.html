@@ -780,7 +780,7 @@ function updateAssessmentsBar() {
   Plotly.newPlot('assessmentsBar', barData, layout, {displayModeBar: false});
 }
 
-// Update population vs assessments by district chart with A-Z sorting and centered legend
+// Update population vs assessments by district chart with A-Z sorting and left-aligned legend
 function updatePopulationByDistrict() {
   const data = currentFilteredData;
   
@@ -808,13 +808,25 @@ function updatePopulationByDistrict() {
     y: populations,
     type: 'bar',
     name: 'Population',
-    marker: {color: '#1f77b4'}
+    marker: {color: '#1f77b4'},
+    text: populations.map(p => p.toLocaleString()), // Add text labels
+    textposition: 'auto', // Automatically position labels
+    textfont: {
+      size: 10,
+      color: 'white'
+    }
   }, {
     x: districts,
     y: assessments,
     type: 'bar',
     name: 'Assessments',
-    marker: {color: '#ff7f0e'}
+    marker: {color: '#ff7f0e'},
+    text: assessments.map(a => a.toLocaleString()), // Add text labels
+    textposition: 'auto', // Automatically position labels
+    textfont: {
+      size: 10,
+      color: 'white'
+    }
   }];
   
   const layout = {
