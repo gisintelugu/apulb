@@ -6,15 +6,20 @@
   <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <style>
+    /* Your existing CSS styles remain the same */
     /* Layout safety */
     *,*::before,*::after{box-sizing:border-box}
 
     body{font-family:Arial,Helvetica,sans-serif;margin:16px;background:#f7f9fc}
-    .header{display:flex;align-items:center;justify-content:space-between}
+    .header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
     .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .export-controls{display:flex;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap}
     .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:14px}
-    .card{background:white;padding:12px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
+    .card{background:white;padding:12px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08);position:relative}
 
     /* Specific background colors for KPI cards */
     .kpis .card:nth-child(1) { background: linear-gradient(135deg, #e3f2fd, #bbdefb); }
@@ -26,7 +31,12 @@
     .card h3{margin:0 0 6px 0;font-size:14px;color:#444}
     .card p{margin:6px 0 0;font-size:20px;font-weight:700}
     .small{font-size:12px;color:#666}
-    input, select{padding:8px;border-radius:6px;border:1px solid #ccc}
+    input, select, button{padding:8px;border-radius:6px;border:1px solid #ccc}
+    button{background:#007bff;color:white;border:none;cursor:pointer;transition:background 0.2s}
+    button:hover{background:#0056b3}
+    button:disabled{background:#6c757d;cursor:not-allowed}
+    .export-btn{background:#28a745}
+    .export-btn:hover{background:#218838}
 
     /* Overall page: left content + right column */
     .layout{display:grid;grid-template-columns:1fr 520px;gap:12px;margin-top:12px}
@@ -137,10 +147,98 @@
       color: #0c5460;
     }
 
+    /* Export controls */
+    .export-section {
+      margin-top: 10px;
+      padding: 10px;
+      background: #f8f9fa;
+      border-radius: 5px;
+      border: 1px solid #e9ecef;
+    }
+    .chart-export-controls {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* Visualization tabs */
+    .viz-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid #dee2e6;
+    }
+    .viz-tab {
+      padding: 8px 16px;
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-bottom: none;
+      border-radius: 4px 4px 0 0;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .viz-tab.active {
+      background: #007bff;
+      color: white;
+      border-color: #007bff;
+    }
+    .viz-content {
+      display: none;
+    }
+    .viz-content.active {
+      display: block;
+    }
+
+    /* Performance metrics */
+    .performance-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 10px;
+      font-size: 11px;
+    }
+    .metric-card {
+      background: #f8f9fa;
+      padding: 6px;
+      border-radius: 4px;
+      text-align: center;
+    }
+    .metric-value {
+      font-weight: bold;
+      color: #007bff;
+    }
+
     /* Responsive */
     @media (max-width:1300px){
       .layout{grid-template-columns:1fr}
       .topRow{grid-template-columns:1fr}
+      .header{flex-direction:column;align-items:stretch}
+      .export-controls{margin-left:0;justify-content:flex-start}
+    }
+
+    @media (max-width:768px){
+      .kpis{grid-template-columns:repeat(2,1fr)}
+      #bottom{grid-template-columns:1fr}
+      .topRow{grid-template-columns:1fr}
+      .controls{flex-direction:column;align-items:stretch}
+      .export-controls{flex-direction:column}
+      .performance-metrics{grid-template-columns:repeat(2,1fr)}
+      .card h3{font-size:12px}
+      .card p{font-size:16px}
+    }
+
+    @media (max-width:480px){
+      .kpis{grid-template-columns:1fr}
+      body{margin:8px}
+      .performance-metrics{grid-template-columns:1fr}
+    }
+
+    /* Print styles */
+    @media print {
+      .no-print { display: none !important; }
+      .card { break-inside: avoid; }
+      .layout { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -159,6 +257,10 @@
       </label>
       <button id="resetBtn">Reset</button>
     </div>
+    <div class="export-controls no-print">
+      <button id="exportDataBtn" class="export-btn">Export Data</button>
+      <button id="exportDashboardBtn" class="export-btn">Export Dashboard</button>
+    </div>
   </div>
 
   <div class="kpis">
@@ -169,14 +271,35 @@
     <div class="card"><h3>Total ULBs</h3><p id="kpiUlbs">—</p><div class="small"></div></div>
   </div>
 
+  <!-- Performance Metrics -->
+  <div class="performance-metrics no-print">
+    <div class="metric-card">
+      <div>Data Load Time</div>
+      <div class="metric-value" id="loadTime">—</div>
+    </div>
+    <div class="metric-card">
+      <div>ULBs Loaded</div>
+      <div class="metric-value" id="ulbsLoaded">—</div>
+    </div>
+    <div class="metric-card">
+      <div>Memory Usage</div>
+      <div class="metric-value" id="memoryUsage">—</div>
+    </div>
+  </div>
+
   <div class="layout">
     <div>
       <div class="topRow">
         <div id="mapBox" class="card">
           <h3>Map / Geo View</h3>
           <div id="mapPlaceholder" style="height:420px;"></div>
-          <div class="note small">
-		  </div>
+          <div class="export-section no-print">
+            <div class="small">Export Map:</div>
+            <div class="chart-export-controls">
+              <button onclick="exportMapAsImage()">Export as PNG</button>
+              <button onclick="exportMapData()">Export Map Data</button>
+            </div>
+          </div>
           <div class="data-status loading" id="dataStatus">
             Loading data from GitHub CSV... <div class="loading"></div>
           </div>
@@ -185,17 +308,58 @@
         <div id="gradePieCard" class="card">
           <h3>ULB Grade Distribution</h3>
           <div id="gradePie"></div>
+          <div class="export-section no-print">
+            <div class="small">Export Chart:</div>
+            <div class="chart-export-controls">
+              <button onclick="exportChart('gradePie', 'Grade Distribution')">Export as PNG</button>
+              <button onclick="exportChartData('grade')">Export Data</button>
+            </div>
+          </div>
         </div>
       </div>
 
       <div id="bottom">
         <div id="scatterCard" class="card">
-          <h3>Area vs Population</h3>
-          <div id="scatter"></div>
+          <div class="viz-tabs">
+            <div class="viz-tab active" data-viz="scatter">Area vs Population</div>
+            <div class="viz-tab" data-viz="treemap">Population Treemap</div>
+            <div class="viz-tab" data-viz="bubble">Assessment Ratio</div>
+          </div>
+          
+          <div class="viz-content active" id="scatterViz">
+            <h3>Area vs Population</h3>
+            <div id="scatter"></div>
+          </div>
+          
+          <div class="viz-content" id="treemapViz">
+            <h3>Population Distribution Treemap</h3>
+            <div id="treemap"></div>
+          </div>
+          
+          <div class="viz-content" id="bubbleViz">
+            <h3>Assessment to Household Ratio</h3>
+            <div id="bubbleChart"></div>
+          </div>
+          
+          <div class="export-section no-print">
+            <div class="small">Export Current Chart:</div>
+            <div class="chart-export-controls">
+              <button onclick="exportCurrentViz()">Export as PNG</button>
+              <button onclick="exportVizData()">Export Data</button>
+            </div>
+          </div>
         </div>
+
         <div id="assessmentsCard" class="card">
           <h3>Assessments vs Households</h3>
           <div id="assessmentsBar"></div>
+          <div class="export-section no-print">
+            <div class="small">Export Chart:</div>
+            <div class="chart-export-controls">
+              <button onclick="exportChart('assessmentsBar', 'Assessments vs Households')">Export as PNG</button>
+              <button onclick="exportChartData('assessments')">Export Data</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -204,6 +368,13 @@
       <div id="populationCard" class="card">
         <h3>Population vs Assessments by District</h3>
         <div id="populationByDistrict"></div>
+        <div class="export-section no-print">
+          <div class="small">Export Chart:</div>
+          <div class="chart-export-controls">
+            <button onclick="exportChart('populationByDistrict', 'Population vs Assessments')">Export as PNG</button>
+            <button onclick="exportChartData('district')">Export Data</button>
+          </div>
+        </div>
       </div>
 
       <div id="tableCard" class="card">
@@ -218,10 +389,19 @@
                 <th data-key="ulb">ULB Name</th>
                 <th data-key="district">District</th>
                 <th data-key="assessments" class="num">Assessments</th>
+                <th data-key="households" class="num">Households</th>
+                <th data-key="population" class="num">Population</th>
               </tr>
             </thead>
             <tbody></tbody>
           </table>
+        </div>
+        <div class="export-section no-print">
+          <div class="small">Export Table:</div>
+          <div class="chart-export-controls">
+            <button onclick="exportTable()">Export as Excel</button>
+            <button onclick="exportTableData()">Export as CSV</button>
+          </div>
         </div>
         <div class="small">Tip: Click a row to filter to that ULB. Click headers to sort. Use the search box to filter.</div>
       </div>
@@ -238,22 +418,35 @@ let map, geojsonLayer, currentFilteredData = [];
 let regionColors = {};
 let selectedULB = null;
 let rawData = [];
+let dataLoadStartTime;
 const GITHUB_CSV_URL = "https://raw.githubusercontent.com/gisintelugu/apulb/refs/heads/main/AP%20ULB%20PROFILE.csv";
 
 // Initialize the dashboard
 document.addEventListener('DOMContentLoaded', function() {
+  dataLoadStartTime = performance.now();
+  
   // Load data from GitHub CSV
   loadCsvFromGitHub();
   
   // Set up event listeners
   document.getElementById('regionFilter').addEventListener('change', function() {
-    updateDistrictFilter(); // Update districts when region changes
+    updateDistrictFilter();
     updateDashboard();
   });
   document.getElementById('districtFilter').addEventListener('change', updateDashboard);
   document.getElementById('searchBox').addEventListener('input', handleSearch);
   document.getElementById('resetBtn').addEventListener('click', resetFilters);
   document.getElementById('tableSearch').addEventListener('input', filterTable);
+  document.getElementById('exportDataBtn').addEventListener('click', exportAllData);
+  document.getElementById('exportDashboardBtn').addEventListener('click', exportDashboardAsPDF);
+  
+  // Visualization tabs
+  document.querySelectorAll('.viz-tab').forEach(tab => {
+    tab.addEventListener('click', function() {
+      const vizType = this.getAttribute('data-viz');
+      switchVisualization(vizType);
+    });
+  });
   
   // Set up table sorting
   document.querySelectorAll('#ulbTable th').forEach(th => {
@@ -267,110 +460,143 @@ document.addEventListener('DOMContentLoaded', function() {
   initMap();
 });
 
-// Load CSV data from GitHub
+// Load CSV data from GitHub - SIMPLIFIED VERSION
 function loadCsvFromGitHub() {
+  console.log("Loading CSV from GitHub...");
   fetch(GITHUB_CSV_URL)
     .then(response => {
       if (!response.ok) {
-        throw new Error('Failed to load CSV from GitHub');
+        throw new Error('Failed to load CSV from GitHub: ' + response.status);
       }
       return response.text();
     })
     .then(csvText => {
-      console.log("Raw CSV text:", csvText.substring(0, 500)); // Debug first 500 chars
+      console.log("CSV loaded successfully, length:", csvText.length);
       document.getElementById('dataStatus').className = 'data-status success';
-      document.getElementById('dataStatus').innerHTML = 'Data loaded successfully';
+      document.getElementById('dataStatus').innerHTML = 'Data loaded successfully - parsing...';
       parseCsvData(csvText);
     })
     .catch(error => {
       console.error('Error loading CSV from GitHub:', error);
       document.getElementById('dataStatus').className = 'data-status error';
       document.getElementById('dataStatus').innerHTML = 'Error loading data from GitHub. Using sample data instead.';
-      // Load default data as fallback
       loadDefaultData();
     });
 }
 
 // Load default data as fallback
 function loadDefaultData() {
-  // Use minimal sample data if GitHub fails
+  console.log("Loading default sample data...");
+  // Use comprehensive sample data
   rawData = [
-    {"SL NO": 1, "REGION": "VISAKHAPATNAM", "DISRTICT NAME": "SRIKAKULAM", "ULB NAME": "AMUDALAVALASA", "ULB CODE": 1082, "GRADE": "II", "AREA IN SQKM": 27.85, "HOUSE HOLD": 10133, "POPULATION (2011 CEN)": 39799, "ASSESSMENTS AS ON DATE \n 10-04-25": 11966, "NAKSHA PROJECT AREA FOR FIELD SURVEY \n (SQ KM)": ""},
-    {"SL NO": 2, "REGION": "VISAKHAPATNAM", "DISRTICT NAME": "VIZIANAGARAM", "ULB NAME": "BOBBILI", "ULB CODE": 1090, "GRADE": "II", "AREA IN SQKM": 25.98, "HOUSE HOLD": 14437, "POPULATION (2011 CEN)": 56819, "ASSESSMENTS AS ON DATE \n 10-04-25": 14382, "NAKSHA PROJECT AREA FOR FIELD SURVEY \n (SQ KM)": ""},
-    {"SL NO": 3, "REGION": "VISAKHAPATNAM", "DISRTICT NAME": "SRIKAKULAM", "ULB NAME": "ICCHAPURAM", "ULB CODE": 1083, "GRADE": "III", "AREA IN SQKM": 21.6, "HOUSE HOLD": 10354, "POPULATION (2011 CEN)": 36493, "ASSESSMENTS AS ON DATE \n 10-04-25": 8893, "NAKSHA PROJECT AREA FOR FIELD SURVEY \n (SQ KM)": ""}
+    {"SL NO": 1, "REGION": "VISAKHAPATNAM", "DISRTICT NAME": "SRIKAKULAM", "ULB NAME": "AMUDALAVALASA", "ULB CODE": 1082, "GRADE": "II", "AREA IN SQKM": 27.85, "HOUSE HOLD": 10133, "POPULATION (2011 CEN)": 39799, "ASSESSMENTS AS ON DATE \n 10-04-25": 11966},
+    {"SL NO": 2, "REGION": "VISAKHAPATNAM", "DISRTICT NAME": "VIZIANAGARAM", "ULB NAME": "BOBBILI", "ULB CODE": 1090, "GRADE": "II", "AREA IN SQKM": 25.98, "HOUSE HOLD": 14437, "POPULATION (2011 CEN)": 56819, "ASSESSMENTS AS ON DATE \n 10-04-25": 14382},
+    {"SL NO": 3, "REGION": "VISAKHAPATNAM", "DISRTICT NAME": "SRIKAKULAM", "ULB NAME": "ICCHAPURAM", "ULB CODE": 1083, "GRADE": "III", "AREA IN SQKM": 21.6, "HOUSE HOLD": 10354, "POPULATION (2011 CEN)": 36493, "ASSESSMENTS AS ON DATE \n 10-04-25": 8893},
+    {"SL NO": 4, "REGION": "KURNOOL", "DISRTICT NAME": "KURNOOL", "ULB NAME": "KURNOOL", "ULB CODE": 2010, "GRADE": "I", "AREA IN SQKM": 65.91, "HOUSE HOLD": 84567, "POPULATION (2011 CEN)": 430746, "ASSESSMENTS AS ON DATE \n 10-04-25": 75643},
+    {"SL NO": 5, "REGION": "GUNTUR", "DISRTICT NAME": "GUNTUR", "ULB NAME": "GUNTUR", "ULB CODE": 3015, "GRADE": "I", "AREA IN SQKM": 45.72, "HOUSE HOLD": 92345, "POPULATION (2011 CEN)": 514461, "ASSESSMENTS AS ON DATE \n 10-04-25": 82345}
   ];
   
   // Initialize with all data
   currentFilteredData = [...rawData];
+  
+  // Update performance metrics
+  const loadTime = performance.now() - dataLoadStartTime;
+  document.getElementById('loadTime').textContent = `${loadTime.toFixed(0)}ms`;
+  document.getElementById('ulbsLoaded').textContent = rawData.length;
   
   // Populate region filter
   updateRegionFilter();
   
   // Initialize all charts and KPIs
   updateDashboard();
+  
+  document.getElementById('dataStatus').className = 'data-status success';
+  document.getElementById('dataStatus').innerHTML = 'Sample data loaded successfully';
 }
 
-// Parse CSV data and update dashboard
+// SIMPLIFIED CSV PARSING - More robust
 function parseCsvData(csvText) {
   try {
+    console.log("Starting CSV parsing...");
+    
     const lines = csvText.split('\n').filter(line => line.trim() !== '');
-    console.log("Total lines:", lines.length);
+    console.log("Total lines found:", lines.length);
     
     if (lines.length < 2) {
       throw new Error('CSV file is empty or has no data');
     }
     
-    // Parse headers - handle different possible formats
-    const headers = parseCsvLine(lines[0]);
-    console.log("Headers:", headers);
+    // Parse headers - handle different encodings and formats
+    const headers = parseCsvLine(lines[0]).map(h => h.trim().replace(/"/g, '').replace(/\s+/g, ' '));
+    console.log("Headers found:", headers);
     
     const newData = [];
+    
     for (let i = 1; i < lines.length; i++) {
+      if (lines[i].trim() === '') continue;
+      
       const values = parseCsvLine(lines[i]);
-      if (values.length < headers.length) continue;
+      if (values.length === 0) continue;
       
       const row = {};
+      
+      // Map values to headers
       headers.forEach((header, index) => {
         let value = values[index] || '';
-        header = header.trim().replace(/"/g, '');
+        value = value.trim().replace(/"/g, '');
         
-        // Map common column name variations
-        if (header === 'DISTRICT NAME' || header === 'DISRTICT NAME') {
+        // Flexible header matching
+        if (header.includes('DISTRICT') || header.includes('DISRTICT')) {
           row['DISRTICT NAME'] = value;
-        } else if (header.includes('ASSESSMENT')) {
+        } else if (header.includes('ASSESSMENT') || header.includes('ASSESS')) {
           row['ASSESSMENTS AS ON DATE \n 10-04-25'] = parseNumber(value);
-        } else if (header.includes('HOUSE')) {
+        } else if (header.includes('HOUSE') || header.includes('HOLD')) {
           row['HOUSE HOLD'] = parseNumber(value);
-        } else if (header.includes('POPULATION')) {
+        } else if (header.includes('POPULATION') || header.includes('POP')) {
           row['POPULATION (2011 CEN)'] = parseNumber(value);
-        } else if (header.includes('AREA') && header.includes('SQKM')) {
+        } else if (header.includes('AREA') && (header.includes('SQKM') || header.includes('SQ'))) {
           row['AREA IN SQKM'] = parseFloat(value) || 0;
-        } else if (header.includes('ULB CODE')) {
+        } else if (header.includes('ULB CODE') || header.includes('CODE')) {
           row['ULB CODE'] = parseNumber(value);
-        } else if (header.includes('ULB NAME')) {
+        } else if (header.includes('ULB NAME') || header.includes('ULB') || header.includes('NAME')) {
           row['ULB NAME'] = value;
-        } else if (header === 'REGION') {
+        } else if (header.includes('REGION')) {
           row['REGION'] = value;
-        } else if (header === 'GRADE') {
+        } else if (header.includes('GRADE')) {
           row['GRADE'] = value;
-        } else if (header === 'SL NO' || header === 'SL.NO') {
+        } else if (header.includes('SL NO') || header.includes('SL.NO') || header.includes('SNO')) {
           row['SL NO'] = parseNumber(value);
         } else {
           row[header] = value;
         }
       });
       
-      // Only add row if it has essential data
+      // Only add row if it has basic ULB data
       if (row['ULB NAME'] && row['ULB CODE']) {
+        // Ensure all required fields have values
+        if (!row['HOUSE HOLD']) row['HOUSE HOLD'] = 0;
+        if (!row['POPULATION (2011 CEN)']) row['POPULATION (2011 CEN)'] = 0;
+        if (!row['ASSESSMENTS AS ON DATE \n 10-04-25']) row['ASSESSMENTS AS ON DATE \n 10-04-25'] = 0;
+        if (!row['AREA IN SQKM']) row['AREA IN SQKM'] = 0;
+        if (!row['GRADE']) row['GRADE'] = 'Unknown';
+        if (!row['REGION']) row['REGION'] = 'Unknown';
+        if (!row['DISRTICT NAME']) row['DISRTICT NAME'] = 'Unknown';
+        
         newData.push(row);
       }
     }
     
-    console.log("Parsed data:", newData.slice(0, 3)); // Show first 3 rows for debugging
+    console.log("Successfully parsed", newData.length, "rows");
+    console.log("First few rows:", newData.slice(0, 3));
     
     if (newData.length === 0) {
-      throw new Error('No valid data rows found in CSV');
+      throw new Error('No valid data rows found in CSV after parsing');
     }
+    
+    // Update performance metrics
+    const loadTime = performance.now() - dataLoadStartTime;
+    document.getElementById('loadTime').textContent = `${loadTime.toFixed(0)}ms`;
+    document.getElementById('ulbsLoaded').textContent = newData.length;
     
     // Update the raw data and refresh dashboard
     rawData = newData;
@@ -382,19 +608,22 @@ function parseCsvData(csvText) {
     // Update dashboard with new data
     updateDashboard();
     
+    document.getElementById('dataStatus').className = 'data-status success';
+    document.getElementById('dataStatus').innerHTML = `Data loaded successfully: ${newData.length} ULBs processed`;
+    
   } catch (error) {
     console.error('Error parsing CSV:', error);
     document.getElementById('dataStatus').className = 'data-status error';
-    document.getElementById('dataStatus').innerHTML = 'Error parsing CSV data. Using sample data instead.';
+    document.getElementById('dataStatus').innerHTML = 'Error parsing CSV data. Using sample data instead. Error: ' + error.message;
     loadDefaultData();
   }
 }
 
 // Helper function to parse numbers from strings
 function parseNumber(str) {
-  if (!str) return 0;
-  // Remove commas and convert to number
-  const num = parseFloat(str.toString().replace(/,/g, ''));
+  if (!str || str === '') return 0;
+  // Remove commas, spaces and convert to number
+  const num = parseFloat(str.toString().replace(/,/g, '').replace(/\s/g, ''));
   return isNaN(num) ? 0 : num;
 }
 
@@ -427,7 +656,7 @@ function parseCsvLine(line) {
 
 // Update region and district filter dropdowns
 function updateRegionFilter() {
-  const regions = [...new Set(rawData.map(d => d.REGION))].filter(r => r).sort();
+  const regions = [...new Set(rawData.map(d => d.REGION))].filter(r => r && r !== 'Unknown').sort();
   const regionFilter = document.getElementById('regionFilter');
   regionFilter.innerHTML = '<option value="">All</option>';
   regions.forEach(region => {
@@ -457,9 +686,9 @@ function updateDistrictFilter() {
     districts = [...new Set(rawData
       .filter(d => d.REGION === regionFilter)
       .map(d => d['DISRTICT NAME'])
-    )].filter(d => d).sort();
+    )].filter(d => d && d !== 'Unknown').sort();
   } else {
-    districts = [...new Set(rawData.map(d => d['DISRTICT NAME']))].filter(d => d).sort();
+    districts = [...new Set(rawData.map(d => d['DISRTICT NAME']))].filter(d => d && d !== 'Unknown').sort();
   }
   
   const districtFilter = document.getElementById('districtFilter');
@@ -486,8 +715,12 @@ function initMap() {
   
   // Load GeoJSON from GitHub
   fetch('https://raw.githubusercontent.com/gisintelugu/apulb/main/ULB_Boundaries_4326.geojson')
-    .then(response => response.json())
+    .then(response => {
+      if (!response.ok) throw new Error('Failed to load GeoJSON');
+      return response.json();
+    })
     .then(data => {
+      console.log("GeoJSON loaded successfully");
       // Add GeoJSON layer with styling
       geojsonLayer = L.geoJSON(data, {
         style: function(feature) {
@@ -569,15 +802,15 @@ function handleSearch() {
   
   // Find matching ULB
   const match = rawData.find(d => 
-    d['ULB CODE'] && d['ULB CODE'].toString().toLowerCase() === searchTerm ||
-    d['ULB NAME'] && d['ULB NAME'].toLowerCase().includes(searchTerm)
+    (d['ULB CODE'] && d['ULB CODE'].toString().toLowerCase() === searchTerm) ||
+    (d['ULB NAME'] && d['ULB NAME'].toLowerCase().includes(searchTerm))
   );
   
   if (match) {
     selectedULB = match;
     // Update region and district filters to match the selected ULB
-    document.getElementById('regionFilter').value = match.REGION;
-    document.getElementById('districtFilter').value = match['DISRTICT NAME'];
+    document.getElementById('regionFilter').value = match.REGION || '';
+    document.getElementById('districtFilter').value = match['DISRTICT NAME'] || '';
     updateDashboard();
     
     // Zoom to the selected ULB on the map
@@ -626,6 +859,8 @@ function resetFilters() {
 
 // Update all dashboard components based on filters
 function updateDashboard() {
+  console.log("Updating dashboard with filtered data...");
+  
   // Get filter values
   const regionFilter = document.getElementById('regionFilter').value;
   const districtFilter = document.getElementById('districtFilter').value;
@@ -638,7 +873,7 @@ function updateDashboard() {
     return true;
   });
   
-  console.log("Filtered data count:", currentFilteredData.length); // Debug
+  console.log("Filtered data count:", currentFilteredData.length);
   
   // Update KPIs
   updateKPIs();
@@ -663,19 +898,18 @@ function updateDashboard() {
 function updateKPIs() {
   const data = currentFilteredData;
   
-  document.getElementById('kpiHouseholds').textContent = 
-    data.reduce((sum, d) => sum + (d['HOUSE HOLD'] || 0), 0).toLocaleString();
+  const totalHouseholds = data.reduce((sum, d) => sum + (d['HOUSE HOLD'] || 0), 0);
+  const totalAssessments = data.reduce((sum, d) => sum + (d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0), 0);
+  const totalPopulation = data.reduce((sum, d) => sum + (d['POPULATION (2011 CEN)'] || 0), 0);
+  const totalArea = data.reduce((sum, d) => sum + (d['AREA IN SQKM'] || 0), 0);
   
-  document.getElementById('kpiAssessments').textContent = 
-    data.reduce((sum, d) => sum + (d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0), 0).toLocaleString();
-  
-  document.getElementById('kpiPopulation').textContent = 
-    data.reduce((sum, d) => sum + (d['POPULATION (2011 CEN)'] || 0), 0).toLocaleString();
-  
-  document.getElementById('kpiArea').textContent = 
-    data.reduce((sum, d) => sum + (d['AREA IN SQKM'] || 0), 0).toFixed(2);
-  
+  document.getElementById('kpiHouseholds').textContent = totalHouseholds.toLocaleString();
+  document.getElementById('kpiAssessments').textContent = totalAssessments.toLocaleString();
+  document.getElementById('kpiPopulation').textContent = totalPopulation.toLocaleString();
+  document.getElementById('kpiArea').textContent = totalArea.toFixed(2);
   document.getElementById('kpiUlbs').textContent = data.length;
+  
+  console.log("KPIs updated:", {totalHouseholds, totalAssessments, totalPopulation, totalArea, ulbs: data.length});
 }
 
 // Update grade distribution pie chart with interactivity
@@ -688,6 +922,11 @@ function updateGradePie() {
   
   const grades = Object.keys(gradeCounts);
   const counts = grades.map(g => gradeCounts[g]);
+  
+  if (grades.length === 0) {
+    document.getElementById('gradePie').innerHTML = '<p style="text-align:center;padding:20px;color:#666">No grade data available</p>';
+    return;
+  }
   
   const pieData = [{
     values: counts,
@@ -772,7 +1011,7 @@ function updateScatterPlot() {
   Plotly.newPlot('scatter', scatterData, layout, {displayModeBar: false});
 }
 
-// Update assessments vs households bar chart - FIXED to show both datasets and sort A-Z
+// Update assessments vs households bar chart
 function updateAssessmentsBar() {
   const data = currentFilteredData.filter(d => 
     (d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0) > 0 || (d['HOUSE HOLD'] || 0) > 0
@@ -852,6 +1091,11 @@ function updatePopulationByDistrict() {
   const populations = districts.map(d => districtData[d].population);
   const assessments = districts.map(d => districtData[d].assessments);
   
+  if (districts.length === 0) {
+    document.getElementById('populationByDistrict').innerHTML = '<p style="text-align:center;padding:20px;color:#666">No district data available</p>';
+    return;
+  }
+  
   const barData = [{
     x: districts,
     y: populations,
@@ -906,12 +1150,17 @@ function updateTable() {
     (a['ULB NAME'] || '').localeCompare(b['ULB NAME'] || '')
   );
   
+  // Performance: Use document fragment for batch DOM updates
+  const fragment = document.createDocumentFragment();
+  
   sortedData.forEach(d => {
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${d['ULB NAME'] || 'N/A'}</td>
       <td>${d['DISRTICT NAME'] || 'N/A'}</td>
       <td class="num">${(d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0).toLocaleString()}</td>
+      <td class="num">${(d['HOUSE HOLD'] || 0).toLocaleString()}</td>
+      <td class="num">${(d['POPULATION (2011 CEN)'] || 0).toLocaleString()}</td>
     `;
     
     // Add click event to filter by this ULB
@@ -920,11 +1169,13 @@ function updateTable() {
       handleSearch();
     });
     
-    tbody.appendChild(row);
+    fragment.appendChild(row);
   });
+  
+  tbody.appendChild(fragment);
 }
 
-// Filter table by search term and district
+// Filter table by search term
 function filterTable() {
   const searchTerm = document.getElementById('tableSearch').value.toLowerCase();
   const rows = document.querySelectorAll('#ulbTable tbody tr');
@@ -944,8 +1195,8 @@ function sortTable(key) {
   const tbody = document.querySelector('#ulbTable tbody');
   const rows = Array.from(tbody.querySelectorAll('tr'));
   
-  const isNumeric = key === 'assessments';
-  const columnIndex = key === 'ulb' ? 0 : key === 'district' ? 1 : 2;
+  const isNumeric = key === 'assessments' || key === 'households' || key === 'population';
+  const columnIndex = key === 'ulb' ? 0 : key === 'district' ? 1 : key === 'assessments' ? 2 : key === 'households' ? 3 : 4;
   
   rows.sort((a, b) => {
     const aVal = isNumeric ? 
@@ -1177,48 +1428,52 @@ function updateChartsWithData(data) {
   const populations = districts.map(d => districtData[d].population);
   const assessments = districts.map(d => districtData[d].assessments);
   
-  const districtBarData = [{
-    x: districts,
-    y: populations,
-    type: 'bar',
-    name: 'Population',
-    marker: {color: '#1f77b4'},
-    text: populations.map(p => p.toLocaleString()),
-    textposition: 'auto',
-    textfont: {
-      size: 10,
-      color: 'white'
-    }
-  }, {
-    x: districts,
-    y: assessments,
-    type: 'bar',
-    name: 'Assessments',
-    marker: {color: '#ff7f0e'},
-    text: assessments.map(a => a.toLocaleString()),
-    textposition: 'auto',
-    textfont: {
-      size: 10,
-      color: 'white'
-    }
-  }];
-  
-  const districtLayout = {
-    margin: {t: 30, b: 80, l: 50, r: 20},
-    xaxis: {tickangle: -45},
-    yaxis: {title: 'Count'},
-    barmode: 'group',
-    legend: {
-      orientation: 'h',
-      y: 1,
-      x: 0,
-      yanchor: 'bottom',
-      xanchor: 'left',
-      bgcolor: 'rgba(255,255,255,0.8)'
-    }
-  };
-  
-  Plotly.newPlot('populationByDistrict', districtBarData, districtLayout, {displayModeBar: false});
+  if (districts.length > 0) {
+    const districtBarData = [{
+      x: districts,
+      y: populations,
+      type: 'bar',
+      name: 'Population',
+      marker: {color: '#1f77b4'},
+      text: populations.map(p => p.toLocaleString()),
+      textposition: 'auto',
+      textfont: {
+        size: 10,
+        color: 'white'
+      }
+    }, {
+      x: districts,
+      y: assessments,
+      type: 'bar',
+      name: 'Assessments',
+      marker: {color: '#ff7f0e'},
+      text: assessments.map(a => a.toLocaleString()),
+      textposition: 'auto',
+      textfont: {
+        size: 10,
+        color: 'white'
+      }
+    }];
+    
+    const districtLayout = {
+      margin: {t: 30, b: 80, l: 50, r: 20},
+      xaxis: {tickangle: -45},
+      yaxis: {title: 'Count'},
+      barmode: 'group',
+      legend: {
+        orientation: 'h',
+        y: 1,
+        x: 0,
+        yanchor: 'bottom',
+        xanchor: 'left',
+        bgcolor: 'rgba(255,255,255,0.8)'
+      }
+    };
+    
+    Plotly.newPlot('populationByDistrict', districtBarData, districtLayout, {displayModeBar: false});
+  } else {
+    document.getElementById('populationByDistrict').innerHTML = '<p style="text-align:center;padding:20px;color:#666">No district data available</p>';
+  }
   
   // Update table
   const tbody = document.querySelector('#ulbTable tbody');
@@ -1234,6 +1489,8 @@ function updateChartsWithData(data) {
       <td>${d['ULB NAME'] || 'N/A'}</td>
       <td>${d['DISRTICT NAME'] || 'N/A'}</td>
       <td class="num">${(d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0).toLocaleString()}</td>
+      <td class="num">${(d['HOUSE HOLD'] || 0).toLocaleString()}</td>
+      <td class="num">${(d['POPULATION (2011 CEN)'] || 0).toLocaleString()}</td>
     `;
     
     row.addEventListener('click', () => {
@@ -1243,6 +1500,422 @@ function updateChartsWithData(data) {
     
     tbody.appendChild(row);
   });
+}
+
+// Switch between visualizations
+function switchVisualization(vizType) {
+  // Update tabs
+  document.querySelectorAll('.viz-tab').forEach(tab => {
+    tab.classList.remove('active');
+  });
+  document.querySelector(`[data-viz="${vizType}"]`).classList.add('active');
+  
+  // Update content
+  document.querySelectorAll('.viz-content').forEach(content => {
+    content.classList.remove('active');
+  });
+  document.getElementById(`${vizType}Viz`).classList.add('active');
+  
+  // Update the visualization
+  updateVisualization(vizType);
+}
+
+// Update specific visualization
+function updateVisualization(vizType) {
+  switch(vizType) {
+    case 'scatter':
+      updateScatterPlot();
+      break;
+    case 'treemap':
+      updateTreemap();
+      break;
+    case 'bubble':
+      updateBubbleChart();
+      break;
+  }
+}
+
+// New visualization: Treemap
+function updateTreemap() {
+  const data = currentFilteredData.filter(d => 
+    (d['POPULATION (2011 CEN)'] || 0) > 0
+  );
+  
+  if (data.length === 0) {
+    document.getElementById('treemap').innerHTML = '<p style="text-align:center;padding:20px;color:#666">No population data available</p>';
+    return;
+  }
+  
+  // Aggregate by district
+  const districtData = {};
+  data.forEach(d => {
+    const district = d['DISRTICT NAME'] || 'Unknown';
+    if (!districtData[district]) {
+      districtData[district] = {
+        population: 0,
+        ulbs: []
+      };
+    }
+    districtData[district].population += d['POPULATION (2011 CEN)'] || 0;
+    districtData[district].ulbs.push({
+      name: d['ULB NAME'],
+      population: d['POPULATION (2011 CEN)'] || 0,
+      region: d.REGION
+    });
+  });
+  
+  // Create treemap data
+  const treemapData = [{
+    type: "treemap",
+    labels: [],
+    parents: [],
+    values: [],
+    text: [],
+    hovertemplate: '<b>%{label}</b><br>Population: %{value:,}<extra></extra>',
+    marker: {
+      colors: []
+    }
+  }];
+  
+  Object.keys(districtData).forEach(district => {
+    // Add district
+    treemapData[0].labels.push(district);
+    treemapData[0].parents.push("");
+    treemapData[0].values.push(districtData[district].population);
+    treemapData[0].text.push(`District: ${district}<br>Population: ${districtData[district].population.toLocaleString()}`);
+    treemapData[0].marker.colors.push(regionColors[data.find(d => d['DISRTICT NAME'] === district)?.REGION] || '#ccc');
+    
+    // Add ULBs under district
+    districtData[district].ulbs.forEach(ulb => {
+      treemapData[0].labels.push(ulb.name);
+      treemapData[0].parents.push(district);
+      treemapData[0].values.push(ulb.population);
+      treemapData[0].text.push(`ULB: ${ulb.name}<br>Population: ${ulb.population.toLocaleString()}`);
+      treemapData[0].marker.colors.push(regionColors[ulb.region] || '#ccc');
+    });
+  });
+  
+  const layout = {
+    margin: {t: 30, b: 20, l: 20, r: 20},
+    height: 300
+  };
+  
+  Plotly.newPlot('treemap', treemapData, layout, {displayModeBar: false});
+}
+
+// New visualization: Bubble Chart for Assessment Ratio
+function updateBubbleChart() {
+  const data = currentFilteredData.filter(d => 
+    (d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0) > 0 && 
+    (d['HOUSE HOLD'] || 0) > 0
+  );
+  
+  if (data.length === 0) {
+    document.getElementById('bubbleChart').innerHTML = '<p style="text-align:center;padding:20px;color:#666">No assessment/household data available</p>';
+    return;
+  }
+  
+  const bubbleData = [{
+    x: data.map(d => d['HOUSE HOLD'] || 0),
+    y: data.map(d => d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0),
+    mode: 'markers',
+    type: 'scatter',
+    text: data.map(d => `${d['ULB NAME']}<br>Assessment Ratio: ${((d['ASSESSMENTS AS ON DATE \n 10-04-25'] / d['HOUSE HOLD']) * 100).toFixed(1)}%`),
+    marker: {
+      size: data.map(d => Math.sqrt(d['POPULATION (2011 CEN)'] || 0) / 10),
+      color: data.map(d => {
+        const ratio = (d['ASSESSMENTS AS ON DATE \n 10-04-25'] / d['HOUSE HOLD']) * 100;
+        return ratio > 100 ? '#ff4444' : ratio > 80 ? '#44ff44' : '#4444ff';
+      }),
+      opacity: 0.7
+    },
+    hovertemplate: '<b>%{text}</b><br>Households: %{x:,}<br>Assessments: %{y:,}<extra></extra>'
+  }];
+  
+  const layout = {
+    margin: {t: 30, b: 40, l: 50, r: 20},
+    xaxis: {title: 'Households'},
+    yaxis: {title: 'Assessments'},
+    hovermode: 'closest',
+    height: 300
+  };
+  
+  Plotly.newPlot('bubbleChart', bubbleData, layout, {displayModeBar: false});
+}
+
+// Export functions (same as before)
+function exportChart(chartId, chartName) {
+  Plotly.downloadImage(chartId, {
+    format: 'png',
+    filename: chartName,
+    height: 600,
+    width: 800
+  });
+}
+
+function exportCurrentViz() {
+  const activeViz = document.querySelector('.viz-content.active');
+  const chartId = activeViz.querySelector('div[id]').id;
+  const chartName = activeViz.querySelector('h3').textContent;
+  exportChart(chartId, chartName);
+}
+
+function exportChartData(dataType) {
+  let dataToExport = [];
+  let filename = '';
+  
+  switch(dataType) {
+    case 'grade':
+      const gradeCounts = {};
+      currentFilteredData.forEach(d => {
+        const grade = d.GRADE || 'Unknown';
+        gradeCounts[grade] = (gradeCounts[grade] || 0) + 1;
+      });
+      dataToExport = Object.keys(gradeCounts).map(grade => ({
+        Grade: grade,
+        Count: gradeCounts[grade]
+      }));
+      filename = 'grade_distribution.csv';
+      break;
+      
+    case 'assessments':
+      dataToExport = currentFilteredData.map(d => ({
+        'ULB Name': d['ULB NAME'],
+        'District': d['DISRTICT NAME'],
+        'Households': d['HOUSE HOLD'] || 0,
+        'Assessments': d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0
+      }));
+      filename = 'assessments_data.csv';
+      break;
+      
+    case 'district':
+      const districtData = {};
+      currentFilteredData.forEach(d => {
+        const district = d['DISRTICT NAME'] || 'Unknown';
+        if (!districtData[district]) {
+          districtData[district] = {
+            population: 0,
+            assessments: 0
+          };
+        }
+        districtData[district].population += d['POPULATION (2011 CEN)'] || 0;
+        districtData[district].assessments += d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0;
+      });
+      dataToExport = Object.keys(districtData).map(district => ({
+        District: district,
+        Population: districtData[district].population,
+        Assessments: districtData[district].assessments
+      }));
+      filename = 'district_data.csv';
+      break;
+  }
+  
+  exportToCSV(dataToExport, filename);
+}
+
+function exportTable() {
+  const dataToExport = currentFilteredData.map(d => ({
+    'SL No': d['SL NO'],
+    'ULB Name': d['ULB NAME'],
+    'ULB Code': d['ULB CODE'],
+    'District': d['DISRTICT NAME'],
+    'Region': d.REGION,
+    'Grade': d.GRADE,
+    'Area (Sq Km)': d['AREA IN SQKM'] || 0,
+    'Households': d['HOUSE HOLD'] || 0,
+    'Population': d['POPULATION (2011 CEN)'] || 0,
+    'Assessments': d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0
+  }));
+  
+  exportToExcel(dataToExport, 'ulb_assessments_data');
+}
+
+function exportTableData() {
+  const dataToExport = currentFilteredData.map(d => ({
+    'ULB Name': d['ULB NAME'],
+    'District': d['DISRTICT NAME'],
+    'Assessments': d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0,
+    'Households': d['HOUSE HOLD'] || 0,
+    'Population': d['POPULATION (2011 CEN)'] || 0
+  }));
+  
+  exportToCSV(dataToExport, 'ulb_table_data.csv');
+}
+
+function exportAllData() {
+  const dataToExport = rawData.map(d => ({
+    'SL No': d['SL NO'],
+    'ULB Name': d['ULB NAME'],
+    'ULB Code': d['ULB CODE'],
+    'District': d['DISRTICT NAME'],
+    'Region': d.REGION,
+    'Grade': d.GRADE,
+    'Area (Sq Km)': d['AREA IN SQKM'] || 0,
+    'Households': d['HOUSE HOLD'] || 0,
+    'Population': d['POPULATION (2011 CEN)'] || 0,
+    'Assessments': d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0
+  }));
+  
+  exportToExcel(dataToExport, 'complete_ulb_data');
+}
+
+function exportMapAsImage() {
+  html2canvas(document.getElementById('mapPlaceholder')).then(canvas => {
+    const link = document.createElement('a');
+    link.download = 'ulb_map.png';
+    link.href = canvas.toDataURL();
+    link.click();
+  });
+}
+
+function exportMapData() {
+  if (!geojsonLayer) return;
+  
+  const features = [];
+  geojsonLayer.eachLayer(layer => {
+    if (layer.feature) {
+      features.push(layer.feature);
+    }
+  });
+  
+  const geojson = {
+    type: 'FeatureCollection',
+    features: features
+  };
+  
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(geojson));
+  const downloadAnchorNode = document.createElement('a');
+  downloadAnchorNode.setAttribute("href", dataStr);
+  downloadAnchorNode.setAttribute("download", "ulb_boundaries.geojson");
+  document.body.appendChild(downloadAnchorNode);
+  downloadAnchorNode.click();
+  downloadAnchorNode.remove();
+}
+
+function exportVizData() {
+  const activeViz = document.querySelector('.viz-tab.active').getAttribute('data-viz');
+  let dataToExport = [];
+  let filename = '';
+  
+  switch(activeViz) {
+    case 'scatter':
+      dataToExport = currentFilteredData.filter(d => 
+        (d['AREA IN SQKM'] || 0) > 0 && (d['POPULATION (2011 CEN)'] || 0) > 0
+      ).map(d => ({
+        'ULB Name': d['ULB NAME'],
+        'Area (Sq Km)': d['AREA IN SQKM'] || 0,
+        'Population': d['POPULATION (2011 CEN)'] || 0
+      }));
+      filename = 'area_vs_population.csv';
+      break;
+      
+    case 'treemap':
+      const districtData = {};
+      currentFilteredData.forEach(d => {
+        const district = d['DISRTICT NAME'] || 'Unknown';
+        if (!districtData[district]) {
+          districtData[district] = {
+            population: 0,
+            ulbs: []
+          };
+        }
+        districtData[district].population += d['POPULATION (2011 CEN)'] || 0;
+        districtData[district].ulbs.push({
+          name: d['ULB NAME'],
+          population: d['POPULATION (2011 CEN)'] || 0
+        });
+      });
+      
+      dataToExport = [];
+      Object.keys(districtData).forEach(district => {
+        dataToExport.push({
+          'Name': district,
+          'Type': 'District',
+          'Population': districtData[district].population
+        });
+        districtData[district].ulbs.forEach(ulb => {
+          dataToExport.push({
+            'Name': ulb.name,
+            'Type': 'ULB',
+            'Parent': district,
+            'Population': ulb.population
+          });
+        });
+      });
+      filename = 'population_treemap.csv';
+      break;
+      
+    case 'bubble':
+      dataToExport = currentFilteredData.filter(d => 
+        (d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0) > 0 && 
+        (d['HOUSE HOLD'] || 0) > 0
+      ).map(d => ({
+        'ULB Name': d['ULB NAME'],
+        'Households': d['HOUSE HOLD'] || 0,
+        'Assessments': d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0,
+        'Assessment Ratio': ((d['ASSESSMENTS AS ON DATE \n 10-04-25'] / d['HOUSE HOLD']) * 100).toFixed(1) + '%'
+      }));
+      filename = 'assessment_ratio.csv';
+      break;
+  }
+  
+  exportToCSV(dataToExport, filename);
+}
+
+function exportDashboardAsPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('landscape');
+  
+  // Add title
+  doc.setFontSize(20);
+  doc.text('ULB Performance Dashboard Report', 20, 20);
+  
+  // Add date
+  doc.setFontSize(10);
+  doc.text(`Generated on: ${new Date().toLocaleString()}`, 20, 30);
+  
+  // Add KPIs
+  doc.setFontSize(12);
+  doc.text('Key Performance Indicators:', 20, 45);
+  doc.text(`Total ULBs: ${document.getElementById('kpiUlbs').textContent}`, 20, 55);
+  doc.text(`Total Population: ${document.getElementById('kpiPopulation').textContent}`, 20, 65);
+  doc.text(`Total Assessments: ${document.getElementById('kpiAssessments').textContent}`, 20, 75);
+  
+  // Note about detailed charts
+  doc.setFontSize(10);
+  doc.text('Note: For detailed interactive charts and maps, please use the web dashboard.', 20, 90);
+  
+  // Save the PDF
+  doc.save('ulb_dashboard_report.pdf');
+}
+
+// Utility export functions
+function exportToCSV(data, filename) {
+  if (!data.length) return;
+  
+  const headers = Object.keys(data[0]);
+  const csvContent = [
+    headers.join(','),
+    ...data.map(row => headers.map(header => {
+      const value = row[header];
+      return typeof value === 'string' && value.includes(',') ? `"${value}"` : value;
+    }).join(','))
+  ].join('\n');
+  
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+}
+
+function exportToExcel(data, filename) {
+  if (!data.length) return;
+  
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'ULB Data');
+  XLSX.writeFile(wb, `${filename}.xlsx`);
 }
 </script>
 </body>
