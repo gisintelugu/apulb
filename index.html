@@ -13,8 +13,11 @@
     body{font-family:Arial,Helvetica,sans-serif;margin:16px;background:#f7f9fc}
     .header{display:flex;align-items:center;justify-content:space-between}
     .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:14px}
-    .card{background:white;padding:12px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
+    .kpis .card:nth-child(1) { background: linear-gradient(135deg, #e3f2fd, #bbdefb); }
+	.kpis .card:nth-child(2) { background: linear-gradient(135deg, #e8f5e8, #c8e6c9); }
+	.kpis .card:nth-child(3) { background: linear-gradient(135deg, #fff3e0, #ffecb3); }
+	.kpis .card:nth-child(4) { background: linear-gradient(135deg, #fce4ec, #f8bbd9); }
+	.kpis .card:nth-child(5) { background: linear-gradient(135deg, #f3e5f5, #e1bee7); }
     .card h3{margin:0 0 6px 0;font-size:14px;color:#444}
     .card p{margin:6px 0 0;font-size:20px;font-weight:700}
     .small{font-size:12px;color:#666}
