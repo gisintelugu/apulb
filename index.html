@@ -1,0 +1,1203 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>ULB Performance Dashboard</title>
+  <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    /* Layout safety */
+    *,*::before,*::after{box-sizing:border-box}
+
+    body{font-family:Arial,Helvetica,sans-serif;margin:16px;background:#f7f9fc}
+    .header{display:flex;align-items:center;justify-content:space-between}
+    .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:14px}
+   .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:14px}
+.card{background:white;padding:12px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
+
+/* Specific background colors for KPI cards */
+.kpis .card:nth-child(1) { background: linear-gradient(135deg, #e3f2fd, #bbdefb); }
+.kpis .card:nth-child(2) { background: linear-gradient(135deg, #e8f5e8, #c8e6c9); }
+.kpis .card:nth-child(3) { background: linear-gradient(135deg, #fff3e0, #ffecb3); }
+.kpis .card:nth-child(4) { background: linear-gradient(135deg, #fce4ec, #f8bbd9); }
+.kpis .card:nth-child(5) { background: linear-gradient(135deg, #f3e5f5, #e1bee7); }
+    .card h3{margin:0 0 6px 0;font-size:14px;color:#444}
+    .card p{margin:6px 0 0;font-size:20px;font-weight:700}
+    .small{font-size:12px;color:#666}
+    input, select{padding:8px;border-radius:6px;border:1px solid #ccc}
+
+    /* Overall page: left content + right column */
+    .layout{display:grid;grid-template-columns:1fr 520px;gap:12px;margin-top:12px}
+
+    /* Top row inside left column: narrower map + pie beside it */
+    .topRow{
+      display:grid;
+      grid-template-columns:minmax(520px,1fr) 400px; /* left map flexes, pie fixed */
+      gap:12px; align-items:start; grid-auto-rows:minmax(0,auto);
+    }
+    .topRow > .card{min-width:0;} /* prevent grid child overflow */
+    #mapBox{height:500px}
+    #mapPlaceholder{height:420px}
+
+    /* Pie container sizing to avoid overlap */
+    #gradePieCard{display:flex;flex-direction:column;min-width:0;}
+    #gradePie{height:455px !important;} /* tweak this to change pie size */
+
+    /* Bottom row under the map (left column) */
+    #bottom{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+
+    /* Right column stack */
+    #rightCol{display:grid;gap:12px;align-content:start}
+    #populationByDistrict{height:260px}
+
+    /* Table styles */
+    #ulbTableWrap{max-height:420px;overflow:auto;border:1px solid #eee;border-radius:6px}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    thead th{position:sticky;top:0;background:#f9fbff;color:#444;border-bottom:1px solid #e5e9f2;cursor:pointer;padding:8px}
+    tbody td{padding:8px;border-bottom:1px solid #f0f2f7}
+    tbody tr:hover{background:#f6f8ff}
+    td.num{text-align:right}
+    .table-controls{display:flex;gap:8px;margin-bottom:8px}
+
+    /* Map legend */
+    .map-legend {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      background: white;
+      padding: 10px;
+      border-radius: 5px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.2);
+      z-index: 1000;
+      max-height: 200px;
+      overflow-y: auto;
+      font-size: 12px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 5px;
+    }
+    .legend-color {
+      width: 15px;
+      height: 15px;
+      margin-right: 5px;
+      border: 1px solid #555;
+    }
+
+    /* ULB Labels on Map */
+    .ulb-label {
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      padding: 2px 6px;
+      font-size: 11px;
+      font-weight: bold;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    /* Loading indicator */
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #3498db;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-left: 10px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Data status */
+    .data-status {
+      margin-top: 10px;
+      padding: 8px;
+      border-radius: 5px;
+      background: #f8f9fa;
+      font-size: 12px;
+    }
+    .data-status.success {
+      background: #d4edda;
+      color: #155724;
+    }
+    .data-status.error {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    .data-status.loading {
+      background: #d1ecf1;
+      color: #0c5460;
+    }
+
+    /* Responsive */
+    @media (max-width:1300px){
+      .layout{grid-template-columns:1fr}
+      .topRow{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>ULB Performance Dashboard</h1>
+    <div class="controls">
+      <label>Search ULB Code/Name:
+        <input id="searchBox" placeholder="Enter ULB CODE or NAME" />
+      </label>
+      <label>Region:
+        <select id="regionFilter"><option value="">All</option></select>
+      </label>
+      <button id="resetBtn">Reset</button>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="card"><h3>Total Households</h3><p id="kpiHouseholds">—</p><div class="small">No of households</div></div>
+    <div class="card"><h3>Total Assessments</h3><p id="kpiAssessments">—</p><div class="small">As on 10-Apr-2025</div></div>
+    <div class="card"><h3>Total Population</h3><p id="kpiPopulation">—</p><div class="small">As per 2011 Census</div></div>
+    <div class="card"><h3>Total Area</h3><p id="kpiArea">—</p><div class="small">in Sq.Kms</div></div>
+    <div class="card"><h3>Total ULBs</h3><p id="kpiUlbs">—</p><div class="small"></div></div>
+  </div>
+
+  <div class="layout">
+    <div>
+      <div class="topRow">
+        <div id="mapBox" class="card">
+          <h3>Map / Geo View</h3>
+          <div id="mapPlaceholder" style="height:420px;"></div>
+          <div class="note small">
+		  </div>
+          <div class="data-status loading" id="dataStatus">
+            Loading data from GitHub CSV... <div class="loading"></div>
+          </div>
+        </div>
+
+        <div id="gradePieCard" class="card">
+          <h3>ULB Grade Distribution</h3>
+          <div id="gradePie"></div>
+        </div>
+      </div>
+
+      <div id="bottom">
+        <div id="scatterCard" class="card">
+          <h3>Area vs Population</h3>
+          <div id="scatter"></div>
+        </div>
+        <div id="assessmentsCard" class="card">
+          <h3>Assessments vs Households</h3>
+          <div id="assessmentsBar"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="rightCol">
+      <div id="populationCard" class="card">
+        <h3>Population vs Assessments by District</h3>
+        <div id="populationByDistrict"></div>
+      </div>
+
+      <div id="tableCard" class="card">
+        <h3>ULB Assessments</h3>
+        <div class="table-controls">
+          <input id="tableSearch" placeholder="Search ULB..." />
+        </div>
+        <div id="ulbTableWrap">
+          <table id="ulbTable">
+            <thead>
+              <tr>
+                <th data-key="ulb">ULB Name</th>
+                <th data-key="assessments" class="num">Assessments</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="small">Tip: Click a row to filter to that ULB. Click headers to sort. Use the search box to filter.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer small">
+    <div>
+    <div class="note">Tip: Type a ULB CODE or NAME and press Enter — visuals filter to that ULB. Reset clears all filters.</div>
+  </div>
+
+<script>
+// Global variables
+let map, geojsonLayer, currentFilteredData = [];
+let regionColors = {};
+let selectedULB = null;
+let rawData = [];
+const GITHUB_CSV_URL = "https://raw.githubusercontent.com/gisintelugu/apulb/refs/heads/main/AP%20ULB%20PROFILE.csv";
+
+// Initialize the dashboard
+document.addEventListener('DOMContentLoaded', function() {
+  // Load data from GitHub CSV
+  loadCsvFromGitHub();
+  
+  // Set up event listeners
+  document.getElementById('regionFilter').addEventListener('change', updateDashboard);
+  document.getElementById('searchBox').addEventListener('input', handleSearch);
+  document.getElementById('resetBtn').addEventListener('click', resetFilters);
+  document.getElementById('tableSearch').addEventListener('input', filterTable);
+  
+  // Set up table sorting
+  document.querySelectorAll('#ulbTable th').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.getAttribute('data-key');
+      sortTable(key);
+    });
+  });
+
+  // Initialize the map
+  initMap();
+});
+
+// Load CSV data from GitHub
+function loadCsvFromGitHub() {
+  fetch(GITHUB_CSV_URL)
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Failed to load CSV from GitHub');
+      }
+      return response.text();
+    })
+    .then(csvText => {
+      console.log("Raw CSV text:", csvText.substring(0, 500)); // Debug first 500 chars
+      document.getElementById('dataStatus').className = 'data-status success';
+      document.getElementById('dataStatus').innerHTML = 'Data loaded successfully';
+      parseCsvData(csvText);
+    })
+    .catch(error => {
+      console.error('Error loading CSV from GitHub:', error);
+      document.getElementById('dataStatus').className = 'data-status error';
+      document.getElementById('dataStatus').innerHTML = 'Error loading data from GitHub. Using sample data instead.';
+      // Load default data as fallback
+      loadDefaultData();
+    });
+}
+
+// Load default data as fallback
+function loadDefaultData() {
+  // Use minimal sample data if GitHub fails
+  rawData = [
+    {"SL NO": 1, "REGION": "VISAKHAPATNAM", "DISRTICT NAME": "SRIKAKULAM", "ULB NAME": "AMUDALAVALASA", "ULB CODE": 1082, "GRADE": "II", "AREA IN SQKM": 27.85, "HOUSE HOLD": 10133, "POPULATION (2011 CEN)": 39799, "ASSESSMENTS AS ON DATE \n 10-04-25": 11966, "NAKSHA PROJECT AREA FOR FIELD SURVEY \n (SQ KM)": ""},
+    {"SL NO": 2, "REGION": "VISAKHAPATNAM", "DISRTICT NAME": "VIZIANAGARAM", "ULB NAME": "BOBBILI", "ULB CODE": 1090, "GRADE": "II", "AREA IN SQKM": 25.98, "HOUSE HOLD": 14437, "POPULATION (2011 CEN)": 56819, "ASSESSMENTS AS ON DATE \n 10-04-25": 14382, "NAKSHA PROJECT AREA FOR FIELD SURVEY \n (SQ KM)": ""},
+    {"SL NO": 3, "REGION": "VISAKHAPATNAM", "DISRTICT NAME": "SRIKAKULAM", "ULB NAME": "ICCHAPURAM", "ULB CODE": 1083, "GRADE": "III", "AREA IN SQKM": 21.6, "HOUSE HOLD": 10354, "POPULATION (2011 CEN)": 36493, "ASSESSMENTS AS ON DATE \n 10-04-25": 8893, "NAKSHA PROJECT AREA FOR FIELD SURVEY \n (SQ KM)": ""}
+  ];
+  
+  // Initialize with all data
+  currentFilteredData = [...rawData];
+  
+  // Populate region filter
+  updateRegionFilter();
+  
+  // Initialize all charts and KPIs
+  updateDashboard();
+}
+
+// Parse CSV data and update dashboard
+function parseCsvData(csvText) {
+  try {
+    const lines = csvText.split('\n').filter(line => line.trim() !== '');
+    console.log("Total lines:", lines.length);
+    
+    if (lines.length < 2) {
+      throw new Error('CSV file is empty or has no data');
+    }
+    
+    // Parse headers - handle different possible formats
+    const headers = parseCsvLine(lines[0]);
+    console.log("Headers:", headers);
+    
+    const newData = [];
+    for (let i = 1; i < lines.length; i++) {
+      const values = parseCsvLine(lines[i]);
+      if (values.length < headers.length) continue;
+      
+      const row = {};
+      headers.forEach((header, index) => {
+        let value = values[index] || '';
+        header = header.trim().replace(/"/g, '');
+        
+        // Map common column name variations
+        if (header === 'DISTRICT NAME' || header === 'DISRTICT NAME') {
+          row['DISRTICT NAME'] = value;
+        } else if (header.includes('ASSESSMENT')) {
+          row['ASSESSMENTS AS ON DATE \n 10-04-25'] = parseNumber(value);
+        } else if (header.includes('HOUSE')) {
+          row['HOUSE HOLD'] = parseNumber(value);
+        } else if (header.includes('POPULATION')) {
+          row['POPULATION (2011 CEN)'] = parseNumber(value);
+        } else if (header.includes('AREA') && header.includes('SQKM')) {
+          row['AREA IN SQKM'] = parseFloat(value) || 0;
+        } else if (header.includes('ULB CODE')) {
+          row['ULB CODE'] = parseNumber(value);
+        } else if (header.includes('ULB NAME')) {
+          row['ULB NAME'] = value;
+        } else if (header === 'REGION') {
+          row['REGION'] = value;
+        } else if (header === 'GRADE') {
+          row['GRADE'] = value;
+        } else if (header === 'SL NO' || header === 'SL.NO') {
+          row['SL NO'] = parseNumber(value);
+        } else {
+          row[header] = value;
+        }
+      });
+      
+      // Only add row if it has essential data
+      if (row['ULB NAME'] && row['ULB CODE']) {
+        newData.push(row);
+      }
+    }
+    
+    console.log("Parsed data:", newData.slice(0, 3)); // Show first 3 rows for debugging
+    
+    if (newData.length === 0) {
+      throw new Error('No valid data rows found in CSV');
+    }
+    
+    // Update the raw data and refresh dashboard
+    rawData = newData;
+    currentFilteredData = [...rawData];
+    
+    // Update region filter
+    updateRegionFilter();
+    
+    // Update dashboard with new data
+    updateDashboard();
+    
+  } catch (error) {
+    console.error('Error parsing CSV:', error);
+    document.getElementById('dataStatus').className = 'data-status error';
+    document.getElementById('dataStatus').innerHTML = 'Error parsing CSV data. Using sample data instead.';
+    loadDefaultData();
+  }
+}
+
+// Helper function to parse numbers from strings
+function parseNumber(str) {
+  if (!str) return 0;
+  // Remove commas and convert to number
+  const num = parseFloat(str.toString().replace(/,/g, ''));
+  return isNaN(num) ? 0 : num;
+}
+
+// Parse CSV line with proper handling of quoted fields and commas
+function parseCsvLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  let quoteChar = '"';
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    
+    if ((char === '"' || char === "'") && !inQuotes) {
+      inQuotes = true;
+      quoteChar = char;
+    } else if (char === quoteChar && inQuotes) {
+      inQuotes = false;
+    } else if (char === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  
+  result.push(current);
+  return result.map(field => field.trim());
+}
+
+// Update region filter dropdown
+function updateRegionFilter() {
+  const regions = [...new Set(rawData.map(d => d.REGION))].filter(r => r).sort();
+  const regionFilter = document.getElementById('regionFilter');
+  regionFilter.innerHTML = '<option value="">All</option>';
+  regions.forEach(region => {
+    const option = document.createElement('option');
+    option.value = region;
+    option.textContent = region;
+    regionFilter.appendChild(option);
+  });
+  
+  // Generate region colors
+  const colorPalette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
+  regions.forEach((region, i) => {
+    regionColors[region] = colorPalette[i % colorPalette.length];
+  });
+}
+
+// Initialize the Leaflet map
+function initMap() {
+  // Create map centered on Andhra Pradesh
+  map = L.map('mapPlaceholder').setView([15.9129, 79.7400], 7);
+  
+  // Add base tile layer
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+  
+  // Load GeoJSON from GitHub
+  fetch('https://raw.githubusercontent.com/gisintelugu/apulb/main/ULB_Boundaries_4326.geojson')
+    .then(response => response.json())
+    .then(data => {
+      // Add GeoJSON layer with styling
+      geojsonLayer = L.geoJSON(data, {
+        style: function(feature) {
+          const region = feature.properties.REGION;
+          return {
+            fillColor: regionColors[region] || '#ccc',
+            weight: 1,
+            opacity: 1,
+            color: 'white',
+            fillOpacity: 0.7
+          };
+        },
+        onEachFeature: function(feature, layer) {
+          // Add tooltip
+          const props = feature.properties;
+          layer.bindTooltip(`
+            <strong>${props.ULB_NAME || 'N/A'}</strong><br>
+            Code: ${props.ULB_CODE || 'N/A'}<br>
+            Region: ${props.REGION || 'N/A'}<br>
+            District: ${props.DISTRICT || 'N/A'}
+          `);
+          
+          // Add click event to filter by ULB
+          layer.on('click', function() {
+            const ulbCode = props.ULB_CODE;
+            if (ulbCode) {
+              document.getElementById('searchBox').value = ulbCode;
+              handleSearch();
+            }
+          });
+          
+          // REMOVED THE ULB LABELS SECTION - This is what you want to remove
+        }
+      }).addTo(map);
+      
+      // Fit map to show all boundaries
+      map.fitBounds(geojsonLayer.getBounds());
+      
+      // Add legend
+      addMapLegend();
+    })
+    .catch(error => {
+      console.error('Error loading GeoJSON:', error);
+      document.getElementById('mapPlaceholder').innerHTML = 
+        '<p style="color:red;padding:20px;text-align:center">Error loading map data. Please check your connection.</p>';
+    });
+}
+
+// Add map legend
+function addMapLegend() {
+  const legend = L.control({position: 'bottomright'});
+  
+  legend.onAdd = function(map) {
+    const div = L.DomUtil.create('div', 'map-legend');
+    div.innerHTML = '<strong>Regions</strong><br>';
+    
+    Object.keys(regionColors).forEach(region => {
+      div.innerHTML += `
+        <div class="legend-item">
+          <div class="legend-color" style="background-color:${regionColors[region]}"></div>
+          ${region}
+        </div>
+      `;
+    });
+    
+    return div;
+  };
+  
+  legend.addTo(map);
+}
+
+// Handle search by ULB code or name
+function handleSearch() {
+  const searchTerm = document.getElementById('searchBox').value.trim().toLowerCase();
+  
+  if (!searchTerm) {
+    selectedULB = null;
+    updateDashboard();
+    return;
+  }
+  
+  // Find matching ULB
+  const match = rawData.find(d => 
+    d['ULB CODE'] && d['ULB CODE'].toString().toLowerCase() === searchTerm ||
+    d['ULB NAME'] && d['ULB NAME'].toLowerCase().includes(searchTerm)
+  );
+  
+  if (match) {
+    selectedULB = match;
+    // Update region filter to match the selected ULB
+    document.getElementById('regionFilter').value = match.REGION;
+    updateDashboard();
+    
+    // Zoom to the selected ULB on the map
+    if (geojsonLayer) {
+      const ulbLayer = findULBLayer(match['ULB CODE']);
+      if (ulbLayer) {
+        map.fitBounds(ulbLayer.getBounds(), {padding: [20, 20]});
+      }
+    }
+  } else {
+    selectedULB = null;
+    updateDashboard();
+  }
+}
+
+// Find a specific ULB layer by code
+function findULBLayer(ulbCode) {
+  let targetLayer = null;
+  
+  if (!geojsonLayer) return null;
+  
+  geojsonLayer.eachLayer(function(layer) {
+    if (layer.feature && layer.feature.properties.ULB_CODE == ulbCode) {
+      targetLayer = layer;
+    }
+  });
+  
+  return targetLayer;
+}
+
+// Reset all filters
+function resetFilters() {
+  document.getElementById('regionFilter').value = '';
+  document.getElementById('searchBox').value = '';
+  document.getElementById('tableSearch').value = '';
+  selectedULB = null;
+  
+  // Reset map view
+  if (geojsonLayer) {
+    map.fitBounds(geojsonLayer.getBounds());
+  }
+  
+  updateDashboard();
+}
+
+// Update all dashboard components based on filters
+function updateDashboard() {
+  // Get filter values
+  const regionFilter = document.getElementById('regionFilter').value;
+  
+  // Filter data
+  currentFilteredData = rawData.filter(d => {
+    if (regionFilter && d.REGION !== regionFilter) return false;
+    if (selectedULB && d['ULB CODE'] !== selectedULB['ULB CODE']) return false;
+    return true;
+  });
+  
+  console.log("Filtered data count:", currentFilteredData.length); // Debug
+  
+  // Update KPIs
+  updateKPIs();
+  
+  // Update charts
+  updateGradePie();
+  updateScatterPlot();
+  updateAssessmentsBar();
+  updatePopulationByDistrict();
+  
+  // Update table
+  updateTable();
+  
+  // Update map highlighting
+  updateMapHighlighting();
+  
+  // Update map view based on filters
+  updateMapView();
+}
+
+// Update KPI cards
+function updateKPIs() {
+  const data = currentFilteredData;
+  
+  document.getElementById('kpiHouseholds').textContent = 
+    data.reduce((sum, d) => sum + (d['HOUSE HOLD'] || 0), 0).toLocaleString();
+  
+  document.getElementById('kpiAssessments').textContent = 
+    data.reduce((sum, d) => sum + (d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0), 0).toLocaleString();
+  
+  document.getElementById('kpiPopulation').textContent = 
+    data.reduce((sum, d) => sum + (d['POPULATION (2011 CEN)'] || 0), 0).toLocaleString();
+  
+  document.getElementById('kpiArea').textContent = 
+    data.reduce((sum, d) => sum + (d['AREA IN SQKM'] || 0), 0).toFixed(2);
+  
+  document.getElementById('kpiUlbs').textContent = data.length;
+}
+
+// Update grade distribution pie chart with interactivity
+function updateGradePie() {
+  const gradeCounts = {};
+  currentFilteredData.forEach(d => {
+    const grade = d.GRADE || 'Unknown';
+    gradeCounts[grade] = (gradeCounts[grade] || 0) + 1;
+  });
+  
+  const grades = Object.keys(gradeCounts);
+  const counts = grades.map(g => gradeCounts[g]);
+  
+  const pieData = [{
+    values: counts,
+    labels: grades,
+    type: 'pie',
+    hole: 0.4,
+    textinfo: 'label+percent',
+    textposition: 'outside',
+    automargin: true
+  }];
+  
+  const layout = {
+    height: 455,
+    margin: {t: 0, b: 0, l: 0, r: 0},
+    showlegend: false
+  };
+  
+  Plotly.newPlot('gradePie', pieData, layout, {displayModeBar: false})
+    .then(function() {
+      // Add click event to pie chart
+      document.getElementById('gradePie').on('plotly_click', function(data) {
+        if (data.points && data.points.length > 0) {
+          const clickedGrade = data.points[0].label;
+          // Filter data by selected grade
+          const gradeFilteredData = rawData.filter(d => d.GRADE === clickedGrade);
+          
+          // Update all charts with grade-filtered data
+          updateChartsWithData(gradeFilteredData);
+          
+          // Update map to show only ULBs with selected grade
+          updateMapWithGrade(clickedGrade);
+        }
+      });
+    });
+}
+
+// Update scatter plot (Area vs Population) with bubble size based on area
+function updateScatterPlot() {
+  const data = currentFilteredData.filter(d => 
+    (d['AREA IN SQKM'] || 0) > 0 && (d['POPULATION (2011 CEN)'] || 0) > 0
+  );
+  
+  if (data.length === 0) {
+    document.getElementById('scatter').innerHTML = '<p style="text-align:center;padding:20px;color:#666">No data available for scatter plot</p>';
+    return;
+  }
+  
+  // Calculate bubble sizes based on area
+  const areas = data.map(d => d['AREA IN SQKM'] || 0);
+  const maxArea = Math.max(...areas);
+  const minArea = Math.min(...areas);
+  
+  // Scale bubble sizes between 5 and 30
+  const bubbleSizes = areas.map(area => {
+    if (maxArea === minArea) return 15;
+    return 5 + (area - minArea) / (maxArea - minArea) * 25;
+  });
+  
+  const scatterData = [{
+    x: data.map(d => d['AREA IN SQKM'] || 0),
+    y: data.map(d => d['POPULATION (2011 CEN)'] || 0),
+    mode: 'markers',
+    type: 'scatter',
+    text: data.map(d => d['ULB NAME']),
+    marker: {
+      size: bubbleSizes,
+      color: data.map(d => regionColors[d.REGION] || '#ccc'),
+      sizemode: 'diameter',
+      sizeref: 2 * maxArea / (30**2),
+      opacity: 0.7
+    },
+    hovertemplate: '<b>%{text}</b><br>Area: %{x} sq km<br>Population: %{y:,}<extra></extra>'
+  }];
+  
+  const layout = {
+    margin: {t: 30, b: 40, l: 50, r: 20},
+    xaxis: {title: 'Area (Sq Km)'},
+    yaxis: {title: 'Population'},
+    hovermode: 'closest'
+  };
+  
+  Plotly.newPlot('scatter', scatterData, layout, {displayModeBar: false});
+}
+
+// Update assessments vs households bar chart - FIXED to show both datasets and sort A-Z
+function updateAssessmentsBar() {
+  const data = currentFilteredData.filter(d => 
+    (d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0) > 0 || (d['HOUSE HOLD'] || 0) > 0
+  );
+  
+  if (data.length === 0) {
+    document.getElementById('assessmentsBar').innerHTML = '<p style="text-align:center;padding:20px;color:#666">No assessment or household data available</p>';
+    return;
+  }
+  
+  // Sort by ULB Name A-Z instead of by assessments
+  const sorted = [...data].sort((a, b) => 
+    (a['ULB NAME'] || '').localeCompare(b['ULB NAME'] || '')
+  ).slice(0, 15); // Show more ULBs since we're sorting A-Z
+  
+  // Create data for both assessments and households
+  const barData = [
+    {
+      x: sorted.map(d => d['ULB NAME']),
+      y: sorted.map(d => d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0),
+      type: 'bar',
+      name: 'Assessments',
+      marker: {color: '#1f77b4'},
+      text: sorted.map(d => (d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0).toLocaleString()),
+      textposition: 'auto'
+    },
+    {
+      x: sorted.map(d => d['ULB NAME']),
+      y: sorted.map(d => d['HOUSE HOLD'] || 0),
+      type: 'bar',
+      name: 'Households',
+      marker: {color: '#ff7f0e'},
+      text: sorted.map(d => (d['HOUSE HOLD'] || 0).toLocaleString()),
+      textposition: 'auto'
+    }
+  ];
+  
+  const layout = {
+    margin: {t: 30, b: 120, l: 50, r: 20}, // Increased bottom margin for labels
+    xaxis: {tickangle: -45},
+    yaxis: {title: 'Count'},
+    barmode: 'group',
+    legend: {
+      orientation: 'h',
+      y: 1,        // Position at top
+      x: 0,        // Position at left
+      yanchor: 'bottom',
+      xanchor: 'left',
+      bgcolor: 'rgba(255,255,255,0.8)'
+    },
+    hovermode: 'closest'
+  };
+  
+  Plotly.newPlot('assessmentsBar', barData, layout, {displayModeBar: false});
+}
+
+// Update population vs assessments by district chart with A-Z sorting and left-aligned legend
+function updatePopulationByDistrict() {
+  const data = currentFilteredData;
+  
+  // Aggregate by district
+  const districtData = {};
+  data.forEach(d => {
+    const district = d['DISRTICT NAME'] || 'Unknown';
+    if (!districtData[district]) {
+      districtData[district] = {
+        population: 0,
+        assessments: 0
+      };
+    }
+    districtData[district].population += d['POPULATION (2011 CEN)'] || 0;
+    districtData[district].assessments += d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0;
+  });
+  
+  // Sort districts A-Z
+  const districts = Object.keys(districtData).sort((a, b) => a.localeCompare(b));
+  const populations = districts.map(d => districtData[d].population);
+  const assessments = districts.map(d => districtData[d].assessments);
+  
+  const barData = [{
+    x: districts,
+    y: populations,
+    type: 'bar',
+    name: 'Population',
+    marker: {color: '#1f77b4'},
+    text: populations.map(p => p.toLocaleString()), // Add text labels
+    textposition: 'auto', // Automatically position labels
+    textfont: {
+      size: 10,
+      color: 'white'
+    }
+  }, {
+    x: districts,
+    y: assessments,
+    type: 'bar',
+    name: 'Assessments',
+    marker: {color: '#ff7f0e'},
+    text: assessments.map(a => a.toLocaleString()), // Add text labels
+    textposition: 'auto', // Automatically position labels
+    textfont: {
+      size: 10,
+      color: 'white'
+    }
+  }];
+  
+  const layout = {
+    margin: {t: 30, b: 80, l: 50, r: 20},
+    xaxis: {tickangle: -45},
+    yaxis: {title: 'Count'},
+    barmode: 'group',
+    legend: {
+      orientation: 'h',
+      y: 1,        // Position at top
+      x: 0,        // Position at left
+      yanchor: 'bottom',
+      xanchor: 'left',
+      bgcolor: 'rgba(255,255,255,0.8)'
+    }
+  };
+  
+  Plotly.newPlot('populationByDistrict', barData, layout, {displayModeBar: false});
+}
+
+// Update the data table with A-Z sorting by default
+function updateTable() {
+  const tbody = document.querySelector('#ulbTable tbody');
+  tbody.innerHTML = '';
+  
+  // Sort by ULB Name (A-Z)
+  const sortedData = [...currentFilteredData].sort((a, b) => 
+    (a['ULB NAME'] || '').localeCompare(b['ULB NAME'] || '')
+  );
+  
+  sortedData.forEach(d => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${d['ULB NAME'] || 'N/A'}</td>
+      <td class="num">${(d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0).toLocaleString()}</td>
+    `;
+    
+    // Add click event to filter by this ULB
+    row.addEventListener('click', () => {
+      document.getElementById('searchBox').value = d['ULB NAME'] || '';
+      handleSearch();
+    });
+    
+    tbody.appendChild(row);
+  });
+}
+
+// Filter table by search term
+function filterTable() {
+  const searchTerm = document.getElementById('tableSearch').value.toLowerCase();
+  const rows = document.querySelectorAll('#ulbTable tbody tr');
+  
+  rows.forEach(row => {
+    const text = row.textContent.toLowerCase();
+    row.style.display = text.includes(searchTerm) ? '' : 'none';
+  });
+}
+
+// Sort table by column
+function sortTable(key) {
+  const tbody = document.querySelector('#ulbTable tbody');
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  
+  const isNumeric = key === 'assessments';
+  
+  rows.sort((a, b) => {
+    const aVal = isNumeric ? 
+      parseInt(a.cells[1].textContent.replace(/,/g, '')) : 
+      a.cells[0].textContent;
+    
+    const bVal = isNumeric ? 
+      parseInt(b.cells[1].textContent.replace(/,/g, '')) : 
+      b.cells[0].textContent;
+    
+    return isNumeric ? bVal - aVal : aVal.localeCompare(bVal);
+  });
+  
+  // Clear and re-append sorted rows
+  tbody.innerHTML = '';
+  rows.forEach(row => tbody.appendChild(row));
+}
+
+// Update map highlighting based on current filters
+function updateMapHighlighting() {
+  if (!geojsonLayer) return;
+  
+  geojsonLayer.eachLayer(layer => {
+    const props = layer.feature.properties;
+    const isVisible = currentFilteredData.some(d => 
+      d['ULB CODE'] && d['ULB CODE'].toString() === props.ULB_CODE
+    );
+    
+    if (isVisible) {
+      layer.setStyle({
+        fillOpacity: 0.7,
+        weight: 2
+      });
+    } else {
+      layer.setStyle({
+        fillOpacity: 0.2,
+        weight: 1
+      });
+    }
+  });
+}
+
+// Update map view based on current filters
+function updateMapView() {
+  if (!geojsonLayer) return;
+  
+  // If we have filtered data, fit map to show only visible ULBs
+  if (currentFilteredData.length > 0 && currentFilteredData.length < rawData.length) {
+    const bounds = new L.LatLngBounds();
+    
+    geojsonLayer.eachLayer(layer => {
+      const props = layer.feature.properties;
+      const isVisible = currentFilteredData.some(d => 
+        d['ULB CODE'] && d['ULB CODE'].toString() === props.ULB_CODE
+      );
+      
+      if (isVisible) {
+        bounds.extend(layer.getBounds());
+      }
+    });
+    
+    if (bounds.isValid()) {
+      map.fitBounds(bounds, {padding: [20, 20]});
+    }
+  } else if (currentFilteredData.length === rawData.length) {
+    // If showing all data, fit to all boundaries
+    map.fitBounds(geojsonLayer.getBounds());
+  }
+}
+
+// Update map to show only ULBs with selected grade
+function updateMapWithGrade(grade) {
+  if (!geojsonLayer) return;
+  
+  const bounds = new L.LatLngBounds();
+  
+  geojsonLayer.eachLayer(layer => {
+    const props = layer.feature.properties;
+    const hasGrade = rawData.some(d => 
+      d['ULB CODE'] && d['ULB CODE'].toString() === props.ULB_CODE && d.GRADE === grade
+    );
+    
+    if (hasGrade) {
+      layer.setStyle({
+        fillOpacity: 0.7,
+        weight: 2
+      });
+      bounds.extend(layer.getBounds());
+    } else {
+      layer.setStyle({
+        fillOpacity: 0.2,
+        weight: 1
+      });
+    }
+  });
+  
+  if (bounds.isValid()) {
+    map.fitBounds(bounds, {padding: [20, 20]});
+  }
+}
+
+// Update all charts with specific data (for grade filtering)
+function updateChartsWithData(data) {
+  // Update KPIs with filtered data
+  document.getElementById('kpiHouseholds').textContent = 
+    data.reduce((sum, d) => sum + (d['HOUSE HOLD'] || 0), 0).toLocaleString();
+  
+  document.getElementById('kpiAssessments').textContent = 
+    data.reduce((sum, d) => sum + (d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0), 0).toLocaleString();
+  
+  document.getElementById('kpiPopulation').textContent = 
+    data.reduce((sum, d) => sum + (d['POPULATION (2011 CEN)'] || 0), 0).toLocaleString();
+  
+  document.getElementById('kpiArea').textContent = 
+    data.reduce((sum, d) => sum + (d['AREA IN SQKM'] || 0), 0).toFixed(2);
+  
+  document.getElementById('kpiUlbs').textContent = data.length;
+  
+  // Update scatter plot
+  const scatterData = data.filter(d => 
+    (d['AREA IN SQKM'] || 0) > 0 && (d['POPULATION (2011 CEN)'] || 0) > 0
+  );
+  
+  if (scatterData.length > 0) {
+    const areas = scatterData.map(d => d['AREA IN SQKM'] || 0);
+    const maxArea = Math.max(...areas);
+    const minArea = Math.min(...areas);
+    
+    const bubbleSizes = areas.map(area => {
+      if (maxArea === minArea) return 15;
+      return 5 + (area - minArea) / (maxArea - minArea) * 25;
+    });
+    
+    const scatterPlotData = [{
+      x: scatterData.map(d => d['AREA IN SQKM'] || 0),
+      y: scatterData.map(d => d['POPULATION (2011 CEN)'] || 0),
+      mode: 'markers',
+      type: 'scatter',
+      text: scatterData.map(d => d['ULB NAME']),
+      marker: {
+        size: bubbleSizes,
+        color: scatterData.map(d => regionColors[d.REGION] || '#ccc'),
+        sizemode: 'diameter',
+        sizeref: 2 * maxArea / (30**2),
+        opacity: 0.7
+      },
+      hovertemplate: '<b>%{text}</b><br>Area: %{x} sq km<br>Population: %{y:,}<extra></extra>'
+    }];
+    
+    const scatterLayout = {
+      margin: {t: 30, b: 40, l: 50, r: 20},
+      xaxis: {title: 'Area (Sq Km)'},
+      yaxis: {title: 'Population'},
+      hovermode: 'closest'
+    };
+    
+    Plotly.newPlot('scatter', scatterPlotData, scatterLayout, {displayModeBar: false});
+  } else {
+    document.getElementById('scatter').innerHTML = '<p style="text-align:center;padding:20px;color:#666">No data available for scatter plot</p>';
+  }
+  
+  // Update assessments vs households bar chart - FIXED to show both datasets and sort A-Z
+  
+  const assessmentData = data.filter(d => 
+    (d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0) > 0 || (d['HOUSE HOLD'] || 0) > 0
+  );
+  
+  if (assessmentData.length > 0) {
+    const sorted = [...assessmentData].sort((a, b) => 
+      (a['ULB NAME'] || '').localeCompare(b['ULB NAME'] || '')
+    ).slice(0, 15);
+    
+    const barData = [
+      {
+        x: sorted.map(d => d['ULB NAME']),
+        y: sorted.map(d => d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0),
+        type: 'bar',
+        name: 'Assessments',
+        marker: {color: '#1f77b4'},
+        text: sorted.map(d => (d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0).toLocaleString()),
+        textposition: 'auto'
+      },
+      {
+        x: sorted.map(d => d['ULB NAME']),
+        y: sorted.map(d => d['HOUSE HOLD'] || 0),
+        type: 'bar',
+        name: 'Households',
+        marker: {color: '#ff7f0e'},
+        text: sorted.map(d => (d['HOUSE HOLD'] || 0).toLocaleString()),
+        textposition: 'auto'
+      }
+    ];
+    
+    const barLayout = {
+		margin: {t: 30, b: 120, l: 50, r: 20},
+		xaxis: {tickangle: -45},
+		yaxis: {title: 'Count'},
+		barmode: 'group',
+		legend: {
+			orientation: 'h',
+			y: 1,        // Position at top
+			x: 0,        // Position at left
+			yanchor: 'bottom',
+			xanchor: 'left',
+			bgcolor: 'rgba(255,255,255,0.8)'
+  },
+  hovermode: 'closest'
+};
+    
+    Plotly.newPlot('assessmentsBar', barData, barLayout, {displayModeBar: false});
+  } else {
+    document.getElementById('assessmentsBar').innerHTML = '<p style="text-align:center;padding:20px;color:#666">No assessment or household data available</p>';
+  }
+  
+  // Update population by district chart with centered legend
+  const districtData = {};
+  data.forEach(d => {
+    const district = d['DISRTICT NAME'] || 'Unknown';
+    if (!districtData[district]) {
+      districtData[district] = {
+        population: 0,
+        assessments: 0
+      };
+    }
+    districtData[district].population += d['POPULATION (2011 CEN)'] || 0;
+    districtData[district].assessments += d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0;
+  });
+  
+  const districts = Object.keys(districtData).sort((a, b) => a.localeCompare(b));
+  const populations = districts.map(d => districtData[d].population);
+  const assessments = districts.map(d => districtData[d].assessments);
+  
+  const districtBarData = [{
+  x: districts,
+  y: populations,
+  type: 'bar',
+  name: 'Population',
+  marker: {color: '#1f77b4'},
+  text: populations.map(p => p.toLocaleString()), // Add text labels
+  textposition: 'auto', // Automatically position labels
+  textfont: {
+    size: 10,
+    color: 'white'
+  }
+}, {
+  x: districts,
+  y: assessments,
+  type: 'bar',
+  name: 'Assessments',
+  marker: {color: '#ff7f0e'},
+  text: assessments.map(a => a.toLocaleString()), // Add text labels
+  textposition: 'auto', // Automatically position labels
+  textfont: {
+    size: 10,
+    color: 'white'
+  }
+}];
+  
+  const districtLayout = {
+    margin: {t: 30, b: 80, l: 50, r: 20},
+    xaxis: {tickangle: -45},
+    yaxis: {title: 'Count'},
+    barmode: 'group',
+    legend: {
+      orientation: 'h',
+      y: 1,
+      x: 0,
+      yanchor: 'bottom',
+    xanchor: 'left',
+    bgcolor: 'rgba(255,255,255,0.8)'
+    }
+  };
+  
+  Plotly.newPlot('populationByDistrict', districtBarData, districtLayout, {displayModeBar: false});
+  
+  // Update table
+  const tbody = document.querySelector('#ulbTable tbody');
+  tbody.innerHTML = '';
+  
+  const tableSortedData = [...data].sort((a, b) => 
+    (a['ULB NAME'] || '').localeCompare(b['ULB NAME'] || '')
+  );
+  
+  tableSortedData.forEach(d => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${d['ULB NAME'] || 'N/A'}</td>
+      <td class="num">${(d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0).toLocaleString()}</td>
+    `;
+    
+    row.addEventListener('click', () => {
+      document.getElementById('searchBox').value = d['ULB NAME'] || '';
+      handleSearch();
+    });
+    
+    tbody.appendChild(row);
+  });
+}
+</script>
+</body>
+</html>
