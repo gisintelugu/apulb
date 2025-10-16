@@ -8,7 +8,7 @@
     /* Layout safety */
     *,*::before,*::after{box-sizing:border-box}
 
-    body{font-family:Arial,Helvetica,sans-serif;margin:16px;background:#f7f9fc}
+    body{font-family:Arial,Helvetica,sans-serif;margin:16px;background:#f7f9fc}m
     .header{display:flex;align-items:center;justify-content:space-between}
     .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:14px}
@@ -84,12 +84,10 @@
     <div>
       <div class="topRow">
         <div id="mapBox" class="card">
-          <h3>Map / Geo View</h3>
-          <div id="mapPlaceholder"></div>
-          <div class="note small">No geo-coordinates — upload a GeoJSON (ULB boundaries) to enable choropleth mapping.</div>
-          <input type="file" id="geoUpload" accept=".geojson,.json" />
-        </div>
-
+  <h3>Map / Geo View</h3>
+  <div id="mapPlaceholder" style="height:500px;"></div>
+  <div class="note small">ULB Boundaries automatically loaded from GitHub.</div>
+</div>
         <div id="gradePieCard" class="card">
           <h3>ULB Grade Distribution</h3>
           <div id="gradePie"></div>
@@ -313,6 +311,67 @@ bindPlotInteractions();
 
 /* Resize handling */
 window.addEventListener('resize', ()=>{refreshAll();});
+<script>
+  const geojsonUrl = "https://raw.githubusercontent.com/gisintelugu/apulb/main/ULB_Boundaries_4326.geojson";
+
+  async function loadGeoJSONMap() {
+    try {
+      const response = await fetch(geojsonUrl);
+      const geoData = await response.json();
+
+      const traces = [];
+
+      geoData.features.forEach(feature => {
+        const geom = feature.geometry;
+
+        if (geom.type === "Polygon") {
+          geom.coordinates.forEach(ring => {
+            const lon = ring.map(c => c[0]);
+            const lat = ring.map(c => c[1]);
+            traces.push({
+              type: "scattermapbox",
+              lon,
+              lat,
+              mode: "lines",
+              line: { color: "#1f77b4", width: 2 },
+              name: feature.properties?.ULB_NAME || "ULB Boundary"
+            });
+          });
+        } else if (geom.type === "MultiPolygon") {
+          geom.coordinates.forEach(poly => {
+            poly.forEach(ring => {
+              const lon = ring.map(c => c[0]);
+              const lat = ring.map(c => c[1]);
+              traces.push({
+                type: "scattermapbox",
+                lon,
+                lat,
+                mode: "lines",
+                line: { color: "#1f77b4", width: 2 },
+                name: feature.properties?.ULB_NAME || "ULB Boundary"
+              });
+            });
+          });
+        }
+      });
+
+      const layout = {
+        mapbox: {
+          style: "carto-positron",
+          center: { lon: 79.5, lat: 15.8 }, // Center Andhra Pradesh
+          zoom: 6.2
+        },
+        margin: { t: 0, b: 0, l: 0, r: 0 },
+        showlegend: false
+      };
+
+      Plotly.newPlot("mapPlaceholder", traces, layout);
+    } catch (err) {
+      console.error("Error loading GeoJSON:", err);
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", loadGeoJSONMap);
 </script>
 </body>
 </html>
