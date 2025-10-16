@@ -14,15 +14,15 @@
     .header{display:flex;align-items:center;justify-content:space-between}
     .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:14px}
-   .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:14px}
-.card{background:white;padding:12px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
+    .card{background:white;padding:12px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
 
-/* Specific background colors for KPI cards */
-.kpis .card:nth-child(1) { background: linear-gradient(135deg, #e3f2fd, #bbdefb); }
-.kpis .card:nth-child(2) { background: linear-gradient(135deg, #e8f5e8, #c8e6c9); }
-.kpis .card:nth-child(3) { background: linear-gradient(135deg, #fff3e0, #ffecb3); }
-.kpis .card:nth-child(4) { background: linear-gradient(135deg, #fce4ec, #f8bbd9); }
-.kpis .card:nth-child(5) { background: linear-gradient(135deg, #f3e5f5, #e1bee7); }
+    /* Specific background colors for KPI cards */
+    .kpis .card:nth-child(1) { background: linear-gradient(135deg, #e3f2fd, #bbdefb); }
+    .kpis .card:nth-child(2) { background: linear-gradient(135deg, #e8f5e8, #c8e6c9); }
+    .kpis .card:nth-child(3) { background: linear-gradient(135deg, #fff3e0, #ffecb3); }
+    .kpis .card:nth-child(4) { background: linear-gradient(135deg, #fce4ec, #f8bbd9); }
+    .kpis .card:nth-child(5) { background: linear-gradient(135deg, #f3e5f5, #e1bee7); }
+    
     .card h3{margin:0 0 6px 0;font-size:14px;color:#444}
     .card p{margin:6px 0 0;font-size:20px;font-weight:700}
     .small{font-size:12px;color:#666}
@@ -59,7 +59,8 @@
     tbody td{padding:8px;border-bottom:1px solid #f0f2f7}
     tbody tr:hover{background:#f6f8ff}
     td.num{text-align:right}
-    .table-controls{display:flex;gap:8px;margin-bottom:8px}
+    .table-controls{display:flex;gap:8px;margin-bottom:8px;align-items:center}
+    .table-controls input, .table-controls select {flex: 1;}
 
     /* Map legend */
     .map-legend {
@@ -153,6 +154,9 @@
       <label>Region:
         <select id="regionFilter"><option value="">All</option></select>
       </label>
+      <label>District:
+        <select id="districtFilter"><option value="">All Districts</option></select>
+      </label>
       <button id="resetBtn">Reset</button>
     </div>
   </div>
@@ -206,12 +210,16 @@
         <h3>ULB Assessments</h3>
         <div class="table-controls">
           <input id="tableSearch" placeholder="Search ULB..." />
+          <select id="tableDistrictFilter">
+            <option value="">All Districts</option>
+          </select>
         </div>
         <div id="ulbTableWrap">
           <table id="ulbTable">
             <thead>
               <tr>
                 <th data-key="ulb">ULB Name</th>
+                <th data-key="district">District</th>
                 <th data-key="assessments" class="num">Assessments</th>
               </tr>
             </thead>
@@ -224,7 +232,6 @@
   </div>
 
   <div class="footer small">
-    <div>
     <div class="note">Tip: Type a ULB CODE or NAME and press Enter — visuals filter to that ULB. Reset clears all filters.</div>
   </div>
 
@@ -243,9 +250,11 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Set up event listeners
   document.getElementById('regionFilter').addEventListener('change', updateDashboard);
+  document.getElementById('districtFilter').addEventListener('change', updateDashboard);
   document.getElementById('searchBox').addEventListener('input', handleSearch);
   document.getElementById('resetBtn').addEventListener('click', resetFilters);
   document.getElementById('tableSearch').addEventListener('input', filterTable);
+  document.getElementById('tableDistrictFilter').addEventListener('change', filterTable);
   
   // Set up table sorting
   document.querySelectorAll('#ulbTable th').forEach(th => {
@@ -417,7 +426,7 @@ function parseCsvLine(line) {
   return result.map(field => field.trim());
 }
 
-// Update region filter dropdown
+// Update region and district filter dropdowns
 function updateRegionFilter() {
   const regions = [...new Set(rawData.map(d => d.REGION))].filter(r => r).sort();
   const regionFilter = document.getElementById('regionFilter');
@@ -429,10 +438,35 @@ function updateRegionFilter() {
     regionFilter.appendChild(option);
   });
   
+  // Update district filters
+  updateDistrictFilter();
+  
   // Generate region colors
   const colorPalette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
   regions.forEach((region, i) => {
     regionColors[region] = colorPalette[i % colorPalette.length];
+  });
+}
+
+// Update district filter dropdowns
+function updateDistrictFilter() {
+  const districts = [...new Set(rawData.map(d => d['DISRTICT NAME']))].filter(d => d).sort();
+  const districtFilter = document.getElementById('districtFilter');
+  const tableDistrictFilter = document.getElementById('tableDistrictFilter');
+  
+  districtFilter.innerHTML = '<option value="">All Districts</option>';
+  tableDistrictFilter.innerHTML = '<option value="">All Districts</option>';
+  
+  districts.forEach(district => {
+    const option1 = document.createElement('option');
+    option1.value = district;
+    option1.textContent = district;
+    districtFilter.appendChild(option1);
+    
+    const option2 = document.createElement('option');
+    option2.value = district;
+    option2.textContent = district;
+    tableDistrictFilter.appendChild(option2);
   });
 }
 
@@ -480,8 +514,6 @@ function initMap() {
               handleSearch();
             }
           });
-          
-          // REMOVED THE ULB LABELS SECTION - This is what you want to remove
         }
       }).addTo(map);
       
@@ -539,8 +571,9 @@ function handleSearch() {
   
   if (match) {
     selectedULB = match;
-    // Update region filter to match the selected ULB
+    // Update region and district filters to match the selected ULB
     document.getElementById('regionFilter').value = match.REGION;
+    document.getElementById('districtFilter').value = match['DISRTICT NAME'];
     updateDashboard();
     
     // Zoom to the selected ULB on the map
@@ -574,8 +607,10 @@ function findULBLayer(ulbCode) {
 // Reset all filters
 function resetFilters() {
   document.getElementById('regionFilter').value = '';
+  document.getElementById('districtFilter').value = '';
   document.getElementById('searchBox').value = '';
   document.getElementById('tableSearch').value = '';
+  document.getElementById('tableDistrictFilter').value = '';
   selectedULB = null;
   
   // Reset map view
@@ -590,10 +625,12 @@ function resetFilters() {
 function updateDashboard() {
   // Get filter values
   const regionFilter = document.getElementById('regionFilter').value;
+  const districtFilter = document.getElementById('districtFilter').value;
   
   // Filter data
   currentFilteredData = rawData.filter(d => {
     if (regionFilter && d.REGION !== regionFilter) return false;
+    if (districtFilter && d['DISRTICT NAME'] !== districtFilter) return false;
     if (selectedULB && d['ULB CODE'] !== selectedULB['ULB CODE']) return false;
     return true;
   });
@@ -870,6 +907,7 @@ function updateTable() {
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${d['ULB NAME'] || 'N/A'}</td>
+      <td>${d['DISRTICT NAME'] || 'N/A'}</td>
       <td class="num">${(d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0).toLocaleString()}</td>
     `;
     
@@ -883,14 +921,20 @@ function updateTable() {
   });
 }
 
-// Filter table by search term
+// Filter table by search term and district
 function filterTable() {
   const searchTerm = document.getElementById('tableSearch').value.toLowerCase();
+  const districtFilter = document.getElementById('tableDistrictFilter').value.toLowerCase();
   const rows = document.querySelectorAll('#ulbTable tbody tr');
   
   rows.forEach(row => {
-    const text = row.textContent.toLowerCase();
-    row.style.display = text.includes(searchTerm) ? '' : 'none';
+    const ulbName = row.cells[0].textContent.toLowerCase();
+    const districtName = row.cells[1].textContent.toLowerCase();
+    
+    const matchesSearch = !searchTerm || ulbName.includes(searchTerm) || districtName.includes(searchTerm);
+    const matchesDistrict = !districtFilter || districtName === districtFilter;
+    
+    row.style.display = (matchesSearch && matchesDistrict) ? '' : 'none';
   });
 }
 
@@ -900,15 +944,16 @@ function sortTable(key) {
   const rows = Array.from(tbody.querySelectorAll('tr'));
   
   const isNumeric = key === 'assessments';
+  const columnIndex = key === 'ulb' ? 0 : key === 'district' ? 1 : 2;
   
   rows.sort((a, b) => {
     const aVal = isNumeric ? 
-      parseInt(a.cells[1].textContent.replace(/,/g, '')) : 
-      a.cells[0].textContent;
+      parseInt(a.cells[columnIndex].textContent.replace(/,/g, '')) : 
+      a.cells[columnIndex].textContent;
     
     const bVal = isNumeric ? 
-      parseInt(b.cells[1].textContent.replace(/,/g, '')) : 
-      b.cells[0].textContent;
+      parseInt(b.cells[columnIndex].textContent.replace(/,/g, '')) : 
+      b.cells[columnIndex].textContent;
     
     return isNumeric ? bVal - aVal : aVal.localeCompare(bVal);
   });
@@ -1061,8 +1106,7 @@ function updateChartsWithData(data) {
     document.getElementById('scatter').innerHTML = '<p style="text-align:center;padding:20px;color:#666">No data available for scatter plot</p>';
   }
   
-  // Update assessments vs households bar chart - FIXED to show both datasets and sort A-Z
-  
+  // Update assessments vs households bar chart
   const assessmentData = data.filter(d => 
     (d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0) > 0 || (d['HOUSE HOLD'] || 0) > 0
   );
@@ -1094,27 +1138,27 @@ function updateChartsWithData(data) {
     ];
     
     const barLayout = {
-		margin: {t: 30, b: 120, l: 50, r: 20},
-		xaxis: {tickangle: -45},
-		yaxis: {title: 'Count'},
-		barmode: 'group',
-		legend: {
-			orientation: 'h',
-			y: 1,        // Position at top
-			x: 0,        // Position at left
-			yanchor: 'bottom',
-			xanchor: 'left',
-			bgcolor: 'rgba(255,255,255,0.8)'
-  },
-  hovermode: 'closest'
-};
+      margin: {t: 30, b: 120, l: 50, r: 20},
+      xaxis: {tickangle: -45},
+      yaxis: {title: 'Count'},
+      barmode: 'group',
+      legend: {
+        orientation: 'h',
+        y: 1,
+        x: 0,
+        yanchor: 'bottom',
+        xanchor: 'left',
+        bgcolor: 'rgba(255,255,255,0.8)'
+      },
+      hovermode: 'closest'
+    };
     
     Plotly.newPlot('assessmentsBar', barData, barLayout, {displayModeBar: false});
   } else {
     document.getElementById('assessmentsBar').innerHTML = '<p style="text-align:center;padding:20px;color:#666">No assessment or household data available</p>';
   }
   
-  // Update population by district chart with centered legend
+  // Update population by district chart
   const districtData = {};
   data.forEach(d => {
     const district = d['DISRTICT NAME'] || 'Unknown';
@@ -1133,30 +1177,30 @@ function updateChartsWithData(data) {
   const assessments = districts.map(d => districtData[d].assessments);
   
   const districtBarData = [{
-  x: districts,
-  y: populations,
-  type: 'bar',
-  name: 'Population',
-  marker: {color: '#1f77b4'},
-  text: populations.map(p => p.toLocaleString()), // Add text labels
-  textposition: 'auto', // Automatically position labels
-  textfont: {
-    size: 10,
-    color: 'white'
-  }
-}, {
-  x: districts,
-  y: assessments,
-  type: 'bar',
-  name: 'Assessments',
-  marker: {color: '#ff7f0e'},
-  text: assessments.map(a => a.toLocaleString()), // Add text labels
-  textposition: 'auto', // Automatically position labels
-  textfont: {
-    size: 10,
-    color: 'white'
-  }
-}];
+    x: districts,
+    y: populations,
+    type: 'bar',
+    name: 'Population',
+    marker: {color: '#1f77b4'},
+    text: populations.map(p => p.toLocaleString()),
+    textposition: 'auto',
+    textfont: {
+      size: 10,
+      color: 'white'
+    }
+  }, {
+    x: districts,
+    y: assessments,
+    type: 'bar',
+    name: 'Assessments',
+    marker: {color: '#ff7f0e'},
+    text: assessments.map(a => a.toLocaleString()),
+    textposition: 'auto',
+    textfont: {
+      size: 10,
+      color: 'white'
+    }
+  }];
   
   const districtLayout = {
     margin: {t: 30, b: 80, l: 50, r: 20},
@@ -1168,8 +1212,8 @@ function updateChartsWithData(data) {
       y: 1,
       x: 0,
       yanchor: 'bottom',
-    xanchor: 'left',
-    bgcolor: 'rgba(255,255,255,0.8)'
+      xanchor: 'left',
+      bgcolor: 'rgba(255,255,255,0.8)'
     }
   };
   
@@ -1187,6 +1231,7 @@ function updateChartsWithData(data) {
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${d['ULB NAME'] || 'N/A'}</td>
+      <td>${d['DISRTICT NAME'] || 'N/A'}</td>
       <td class="num">${(d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0).toLocaleString()}</td>
     `;
     
