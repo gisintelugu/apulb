@@ -163,7 +163,7 @@
         <div id="mapBox" class="card">
           <h3>Map / Geo View</h3>
           <div id="mapPlaceholder" style="height:420px;"></div>
-          <div class="note small">ULB Boundaries automatically loaded from GitHub.</div>
+          <div class="note small"></div>
           <div class="data-status loading" id="dataStatus">
             Loading data from GitHub CSV... <div class="loading"></div>
           </div>
@@ -262,7 +262,7 @@ function loadCsvFromGitHub() {
     .then(csvText => {
       console.log("Raw CSV text:", csvText.substring(0, 500)); // Debug first 500 chars
       document.getElementById('dataStatus').className = 'data-status success';
-      document.getElementById('dataStatus').innerHTML = 'Data loaded successfully from GitHub CSV';
+      document.getElementById('dataStatus').innerHTML = 'Data loaded successfully';
       parseCsvData(csvText);
     })
     .catch(error => {
