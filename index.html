@@ -312,66 +312,79 @@ bindPlotInteractions();
 /* Resize handling */
 window.addEventListener('resize', ()=>{refreshAll();});
 <script>
-  const geojsonUrl = "https://raw.githubusercontent.com/gisintelugu/apulb/main/ULB_Boundaries_4326.geojson";
+  const geojsonUrl =
+    "https://raw.githubusercontent.com/gisintelugu/apulb/main/ULB_Boundaries_4326.geojson";
 
-  async function loadGeoJSONMap() {
+  async function loadGeoJSONMapAndInitDashboard() {
     try {
       const response = await fetch(geojsonUrl);
       const geoData = await response.json();
 
       const traces = [];
 
-      geoData.features.forEach(feature => {
+      geoData.features.forEach((feature) => {
         const geom = feature.geometry;
-
         if (geom.type === "Polygon") {
-          geom.coordinates.forEach(ring => {
-            const lon = ring.map(c => c[0]);
-            const lat = ring.map(c => c[1]);
+          geom.coordinates.forEach((ring) => {
+            const lon = ring.map((c) => c[0]);
+            const lat = ring.map((c) => c[1]);
             traces.push({
               type: "scattermapbox",
               lon,
               lat,
               mode: "lines",
               line: { color: "#1f77b4", width: 2 },
-              name: feature.properties?.ULB_NAME || "ULB Boundary"
+              name: feature.properties?.ULB_NAME || "ULB Boundary",
             });
           });
         } else if (geom.type === "MultiPolygon") {
-          geom.coordinates.forEach(poly => {
-            poly.forEach(ring => {
-              const lon = ring.map(c => c[0]);
-              const lat = ring.map(c => c[1]);
+          geom.coordinates.forEach((poly) =>
+            poly.forEach((ring) => {
+              const lon = ring.map((c) => c[0]);
+              const lat = ring.map((c) => c[1]);
               traces.push({
                 type: "scattermapbox",
                 lon,
                 lat,
                 mode: "lines",
                 line: { color: "#1f77b4", width: 2 },
-                name: feature.properties?.ULB_NAME || "ULB Boundary"
+                name: feature.properties?.ULB_NAME || "ULB Boundary",
               });
-            });
-          });
+            })
+          );
         }
       });
 
       const layout = {
         mapbox: {
           style: "carto-positron",
-          center: { lon: 79.5, lat: 15.8 }, // Center Andhra Pradesh
-          zoom: 6.2
+          center: { lon: 79.5, lat: 15.8 },
+          zoom: 6.2,
         },
         margin: { t: 0, b: 0, l: 0, r: 0 },
-        showlegend: false
+        showlegend: false,
       };
 
       Plotly.newPlot("mapPlaceholder", traces, layout);
+
+      // ✅ Trigger your dashboard initialization after map load
+      if (typeof initializeDashboard === "function") {
+        initializeDashboard(rawData); // if your dashboard has a setup function
+      } else {
+        // fallback: run analytics setup manually
+        if (typeof updateKPIs === "function") updateKPIs(rawData);
+        if (typeof renderCharts === "function") renderCharts(rawData);
+        if (typeof populateFilters === "function") populateFilters(rawData);
+      }
+
     } catch (err) {
       console.error("Error loading GeoJSON:", err);
     }
   }
 
-  document.addEventListener("DOMContentLoaded", loadGeoJSONMap);
+  document.addEventListener("DOMContentLoaded", loadGeoJSONMapAndInitDashboard);
+</script>
+
 </script>
 </body>
 </html>
