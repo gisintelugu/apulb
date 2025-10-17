@@ -257,11 +257,7 @@
       </label>
       <button id="resetBtn">Reset</button>
     </div>
-    <div class="export-controls no-print">
-      <button id="exportDataBtn" class="export-btn">Export Data</button>
-      <button id="exportDashboardBtn" class="export-btn">Export Dashboard</button>
     </div>
-  </div>
 
   <div class="kpis">
     <div class="card"><h3>Total Households</h3><p id="kpiHouseholds">—</p><div class="small">No of households</div></div>
@@ -437,8 +433,6 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('searchBox').addEventListener('input', handleSearch);
   document.getElementById('resetBtn').addEventListener('click', resetFilters);
   document.getElementById('tableSearch').addEventListener('input', filterTable);
-  document.getElementById('exportDataBtn').addEventListener('click', exportAllData);
-  document.getElementById('exportDashboardBtn').addEventListener('click', exportDashboardAsPDF);
   
   // Visualization tabs
   document.querySelectorAll('.viz-tab').forEach(tab => {
