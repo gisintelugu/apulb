@@ -257,7 +257,7 @@
       </label>
       <button id="resetBtn">Reset</button>
     </div>
-    </div>
+   </div>
 
   <div class="kpis">
     <div class="card"><h3>Total Households</h3><p id="kpiHouseholds">—</p><div class="small">No of households</div></div>
@@ -383,10 +383,7 @@
             <thead>
               <tr>
                 <th data-key="ulb">ULB Name</th>
-                <th data-key="district">District</th>
                 <th data-key="assessments" class="num">Assessments</th>
-                <th data-key="households" class="num">Households</th>
-                <th data-key="population" class="num">Population</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -1151,10 +1148,7 @@ function updateTable() {
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${d['ULB NAME'] || 'N/A'}</td>
-      <td>${d['DISRTICT NAME'] || 'N/A'}</td>
       <td class="num">${(d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0).toLocaleString()}</td>
-      <td class="num">${(d['HOUSE HOLD'] || 0).toLocaleString()}</td>
-      <td class="num">${(d['POPULATION (2011 CEN)'] || 0).toLocaleString()}</td>
     `;
     
     // Add click event to filter by this ULB
@@ -1189,8 +1183,8 @@ function sortTable(key) {
   const tbody = document.querySelector('#ulbTable tbody');
   const rows = Array.from(tbody.querySelectorAll('tr'));
   
-  const isNumeric = key === 'assessments' || key === 'households' || key === 'population';
-  const columnIndex = key === 'ulb' ? 0 : key === 'district' ? 1 : key === 'assessments' ? 2 : key === 'households' ? 3 : 4;
+  const isNumeric = key === 'assessments';
+  const columnIndex = key === 'ulb' ? 0 : 1;
   
   rows.sort((a, b) => {
     const aVal = isNumeric ? 
@@ -1481,10 +1475,7 @@ function updateChartsWithData(data) {
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${d['ULB NAME'] || 'N/A'}</td>
-      <td>${d['DISRTICT NAME'] || 'N/A'}</td>
       <td class="num">${(d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0).toLocaleString()}</td>
-      <td class="num">${(d['HOUSE HOLD'] || 0).toLocaleString()}</td>
-      <td class="num">${(d['POPULATION (2011 CEN)'] || 0).toLocaleString()}</td>
     `;
     
     row.addEventListener('click', () => {
@@ -1727,10 +1718,7 @@ function exportTable() {
 function exportTableData() {
   const dataToExport = currentFilteredData.map(d => ({
     'ULB Name': d['ULB NAME'],
-    'District': d['DISRTICT NAME'],
-    'Assessments': d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0,
-    'Households': d['HOUSE HOLD'] || 0,
-    'Population': d['POPULATION (2011 CEN)'] || 0
+    'Assessments': d['ASSESSMENTS AS ON DATE \n 10-04-25'] || 0
   }));
   
   exportToCSV(dataToExport, 'ulb_table_data.csv');
